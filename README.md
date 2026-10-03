@@ -18,7 +18,7 @@ Lightsail에서 Docker Compose로 API와 PostgreSQL을 실행합니다. PostgreS
 
 GitHub Actions repository variables:
 
-- `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, `SSM_INSTANCE_ID`
+- `AWS_ROLE_ARN`, `AWS_REGION`, `SSM_INSTANCE_ID`
 
 Access Key 대신 GitHub OIDC 임시 자격증명을 사용합니다. 프론트/백엔드 역할과 S3
 버킷은 `infra/aws/github-deploy.yml`로 생성하며, 출력되는 managed-node 정책은
