@@ -51,6 +51,9 @@ IAM role에 연결해야 합니다. 이 정책은 해당 경로에서 `ssm:GetPa
 CloudFront OAC를 통해서만 읽을 수 있고, 정적 미디어 배포는 HTTPS와 압축을 사용합니다.
 스택은 `ap-northeast-2`에 배포하며 CloudFront 기본 도메인을 출력합니다. 현재 애플리케이션에는
 이미지 업로드 API가 없으므로, 업로드 기능을 추가할 때 별도의 최소 권한 업로드 인증을 연결해야 합니다.
+`img.codeiary.com` 사용자 지정 도메인을 연결하려면 `us-east-1` ACM 인증서를 DNS 검증하고,
+Cloudflare에 ACM 검증 CNAME과 CloudFront 대상 CNAME(`img` → 배포 도메인, DNS only)을 등록한 뒤
+`DomainCertificateArn` 파라미터로 스택을 갱신합니다.
 
 로컬 개발용 Compose 설정은 `.env.example`을 참고합니다. 운영 환경에서는 `.env` 파일을
 사용하지 않습니다. ECR Public 이미지는 서버에서 별도 로그인 없이 내려받습니다.

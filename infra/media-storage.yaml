@@ -1,6 +1,15 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Private Codeiary media bucket delivered through CloudFront.
 
+Parameters:
+  DomainCertificateArn:
+    Type: String
+    Default: ''
+    Description: Optional ACM certificate ARN in us-east-1 for img.codeiary.com.
+
+Conditions:
+  UseCustomDomain: !Not [!Equals [!Ref DomainCertificateArn, '']]
+
 Resources:
   MediaBucket:
     Type: AWS::S3::Bucket
@@ -73,6 +82,16 @@ Resources:
           Compress: true
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
           ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03
+        Aliases: !If
+          - UseCustomDomain
+          - - img.codeiary.com
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - UseCustomDomain
+          - AcmCertificateArn: !Ref DomainCertificateArn
+            SslSupportMethod: sni-only
+            MinimumProtocolVersion: TLSv1.2_2021
+          - CloudFrontDefaultCertificate: true
 
   MediaBucketPolicy:
     Type: AWS::S3::BucketPolicy
