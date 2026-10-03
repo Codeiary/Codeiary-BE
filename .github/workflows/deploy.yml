@@ -3,6 +3,17 @@ name: Build and deploy
 on:
   push:
     branches: ["main"]
+    paths:
+      - "src/**"
+      - "build.gradle"
+      - "settings.gradle"
+      - "gradle/**"
+      - "gradlew"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".env.example"
+      - "compose.yaml"
+      - "deploy/**"
   workflow_dispatch:
 
 permissions:
