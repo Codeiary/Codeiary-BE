@@ -7,12 +7,12 @@ on:
 
 permissions:
   contents: read
-  packages: write
   id-token: write
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: public.ecr.aws
+  REGISTRY_ALIAS: c6w0t5f3
+  IMAGE_NAME: codeiary-api
 
 jobs:
   build-and-push:
@@ -20,17 +20,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - name: Configure temporary AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      - uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
       - id: metadata
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
             type=sha,format=long
       - uses: docker/build-push-action@v6
         with:
@@ -50,9 +52,9 @@ jobs:
         env:
           INSTANCE_ID: ${{ vars.SSM_INSTANCE_ID }}
         run: |
-          IMAGE_NAME_LOWER=$(printf '%s' "$IMAGE_NAME" | tr '[:upper:]' '[:lower:]')
-          IMAGE="${REGISTRY}/${IMAGE_NAME_LOWER}:${GITHUB_SHA}"
+          IMAGE="${REGISTRY}/${REGISTRY_ALIAS}/${IMAGE_NAME}:sha-${GITHUB_SHA}"
           COMMAND_ID=$(aws ssm send-command \
+            --region "${{ vars.AWS_REGION }}" \
             --instance-ids "$INSTANCE_ID" \
             --document-name AWS-RunShellScript \
             --comment "Deploy Codeiary API ${GITHUB_SHA}" \
