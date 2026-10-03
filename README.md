@@ -45,5 +45,12 @@ IAM role에 연결해야 합니다. 이 정책은 해당 경로에서 `ssm:GetPa
 운영 인스턴스는 Lightsail `small_3_0` 플랜(2GB RAM)입니다. 방화벽은 `22`, `80`, `443`만
 허용하고 `8080`, `5432`는 열지 않습니다.
 
+## 미디어 저장소
+
+`infra/media-storage.yaml`은 비공개 S3 버킷과 CloudFront 배포를 생성합니다. S3 객체는
+CloudFront OAC를 통해서만 읽을 수 있고, 정적 미디어 배포는 HTTPS와 압축을 사용합니다.
+스택은 `ap-northeast-2`에 배포하며 CloudFront 기본 도메인을 출력합니다. 현재 애플리케이션에는
+이미지 업로드 API가 없으므로, 업로드 기능을 추가할 때 별도의 최소 권한 업로드 인증을 연결해야 합니다.
+
 로컬 개발용 Compose 설정은 `.env.example`을 참고합니다. 운영 환경에서는 `.env` 파일을
 사용하지 않습니다. ECR Public 이미지는 서버에서 별도 로그인 없이 내려받습니다.
