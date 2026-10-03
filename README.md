@@ -35,8 +35,15 @@ chmod +x deploy/bootstrap-lightsail.sh
 ./deploy/bootstrap-lightsail.sh
 ```
 
+운영 DB 설정은 서울 리전 Systems Manager Parameter Store의 `SecureString`에 저장합니다.
+`/codeiary/prod/postgres-db`, `/codeiary/prod/postgres-user`, `/codeiary/prod/postgres-password`
+파라미터를 준비하고 `deploy/ssm-parameter-store-policy.json`을 SSM hybrid activation의
+IAM role에 연결해야 합니다. 이 정책은 해당 경로에서 `ssm:GetParameter`와 제한된
+`kms:Decrypt`만 허용합니다. 배포 스크립트는 값을 `/run`의 임시 Compose env 파일로
+받아 컨테이너를 갱신한 뒤 파일을 삭제합니다. 앱 이미지는 비밀값을 포함하지 않습니다.
+
 운영 인스턴스는 Lightsail `small_3_0` 플랜(2GB RAM)입니다. 방화벽은 `22`, `80`, `443`만
 허용하고 `8080`, `5432`는 열지 않습니다.
 
-서버의 `/opt/codeiary/.env`에 DB 설정을 최초 한 번 저장하고 권한을 `600`으로
-제한합니다. ECR Public 이미지는 서버에서 별도 로그인 없이 내려받습니다.
+로컬 개발용 Compose 설정은 `.env.example`을 참고합니다. 운영 환경에서는 `.env` 파일을
+사용하지 않습니다. ECR Public 이미지는 서버에서 별도 로그인 없이 내려받습니다.
