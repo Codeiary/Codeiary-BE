@@ -11,8 +11,10 @@ public class TestcontainersConfiguration {
 
     @Bean
     @ServiceConnection
+    @SuppressWarnings("resource") // Spring Boot owns the container's start/stop lifecycle.
     PostgreSQLContainer postgresContainer() {
-        return new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine"))
-                .withDatabaseName("codeiary_test");
+        var container = new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine"));
+        container.withDatabaseName("codeiary_test");
+        return container;
     }
 }

@@ -6,6 +6,17 @@ server:
   forward-headers-strategy: framework
   shutdown: graceful
 
+auth:
+  jwt:
+    secret: ${JWT_SECRET:}
+    issuer: codeiary
+    audience: codeiary-api
+    access-token-ttl: 30m
+    refresh-token-ttl: 7d
+  token-cleanup:
+    cron: "0 0 3 * * *"
+    zone: Asia/Seoul
+
 springdoc:
   api-docs:
     path: /api/v3/api-docs
