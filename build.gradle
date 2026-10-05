@@ -54,9 +54,15 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
 
     // Test
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
 }
 
 tasks.named('test') {
 	useJUnitPlatform()
 }
 
+tasks.named('bootTestRun') {
+    mainClass = 'com.codeiary.TestCodeiaryBeApplication'
+    args '--spring.profiles.active=test'
+}
