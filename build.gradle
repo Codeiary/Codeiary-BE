@@ -8,10 +8,18 @@ group = 'com.codeiary'
 version = '0.0.1-SNAPSHOT'
 description = 'codeiary'
 
+ext {
+    mapstructVersion = '1.6.3'
+}
+
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(21)
 	}
+}
+
+configurations {
+    testAnnotationProcessor.extendsFrom annotationProcessor
 }
 
 repositories {
@@ -49,6 +57,11 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // MapStruct
+    implementation "org.mapstruct:mapstruct:${mapstructVersion}"
+    annotationProcessor "org.mapstruct:mapstruct-processor:${mapstructVersion}"
+    annotationProcessor 'org.projectlombok:lombok-mapstruct-binding:0.2.0'
 
     // Dev
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
