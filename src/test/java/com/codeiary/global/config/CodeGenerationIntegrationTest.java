@@ -1,5 +1,6 @@
 package com.codeiary.global.config;
 
+import com.codeiary.CodeiaryBeApplication;
 import com.codeiary.support.IntegrationTestSupport;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import fixtures.persistence.QSampleEntry;
@@ -121,8 +122,8 @@ class CodeGenerationIntegrationTest extends IntegrationTestSupport {
     }
 
     @TestConfiguration(proxyBeanMethods = false)
-    @EntityScan(basePackageClasses = SampleEntry.class)
-    @EnableJpaRepositories(basePackageClasses = SampleEntryRepository.class)
+    @EntityScan(basePackageClasses = {SampleEntry.class, CodeiaryBeApplication.class})
+    @EnableJpaRepositories(basePackageClasses = {SampleEntryRepository.class, CodeiaryBeApplication.class})
     static class PersistenceConfiguration {
     }
 }
