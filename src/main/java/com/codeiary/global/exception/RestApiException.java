@@ -1,10 +1,14 @@
 package com.codeiary.global.exception;
 
+import java.io.Serial;
 import java.util.Objects;
 import lombok.Getter;
 
 @Getter
 public class RestApiException extends RuntimeException {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
 
     private final ErrorCode errorCode;
 

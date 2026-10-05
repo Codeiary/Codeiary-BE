@@ -31,6 +31,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-codeiary}
       DB_USERNAME: ${POSTGRES_USER:-codeiary}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      JWT_SECRET: ${JWT_SECRET:?Set a Base64-encoded JWT_SECRET of at least 32 bytes}
     networks:
       - backend
 

@@ -30,19 +30,23 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
     private MockMvc mockMvc;
 
     @Test
-    @DisplayName("인증 없이 OpenAPI 문서와 Swagger 설정을 조회할 수 있다.")
-    void documentationAndSwaggerConfigurationAreAccessible() throws Exception {
+    @DisplayName("인증 없이 OpenAPI 문서를 조회할 수 있다.")
+    void readOpenApi() throws Exception {
         mockMvc.perform(get("/api/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.info.title").value("Codeiary API"));
+                .andExpect(jsonPath("$.info.title").value("Codeiary API"))
+                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.paths['/api/users/me']").doesNotExist())
+                .andExpect(jsonPath("$.paths['/api/admin/me'].get.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist());
         mockMvc.perform(get("/api/v3/api-docs/swagger-config"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.url").value("/api/v3/api-docs"));
     }
 
     @Test
-    @DisplayName("API 프록시 경로에서 Swagger 화면과 리소스를 로드할 수 있다.")
-    void swaggerUiAndAssetsUseTheApiPrefix() throws Exception {
+    @DisplayName("API 경로에서 Swagger를 로드할 수 있다.")
+    void loadSwagger() throws Exception {
         mockMvc.perform(get("/api/swagger-ui.html"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(redirectedUrl("/api/swagger-ui/index.html"));
@@ -57,14 +61,14 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("인증과 CSRF 토큰 없이 일반 API에 조회와 변경 요청을 할 수 있다.")
-    void allEndpointsAllowAnonymousRequestsWithoutCsrf() throws Exception {
+    @DisplayName("공개 조회를 허용하고 비인증 변경을 차단할 수 있다.")
+    void protectWriteRequests() throws Exception {
         mockMvc.perform(get("/api/test/security"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("ok"));
         mockMvc.perform(post("/api/test/security"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("ok"));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @TestComponent

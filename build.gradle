@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
+    id 'eclipse'
 }
 
 group = 'com.codeiary'
@@ -12,6 +13,7 @@ ext {
     mapstructVersion = '1.6.3'
     querydslVersion = '7.7'
     springdocVersion = '3.1.1'
+    jjwtVersion = '0.13.0'
 }
 
 java {
@@ -39,6 +41,7 @@ dependencies {
 
     // JPA
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 
     // Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
@@ -46,6 +49,11 @@ dependencies {
     // Security
     implementation 'org.springframework.boot:spring-boot-starter-security'
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
+
+    // JWT (email/password authentication)
+    implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
+    runtimeOnly "io.jsonwebtoken:jjwt-gson:${jjwtVersion}"
 
     // PostgreSQL
     runtimeOnly 'org.postgresql:postgresql'
@@ -84,6 +92,75 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    if (!options.compilerArgs.contains('-parameters')) {
+        options.compilerArgs.add('-parameters')
+    }
+}
+
+tasks.register('eclipsePreferences') {
+    def settings = layout.projectDirectory.dir('.settings')
+    outputs.files(settings.file('org.eclipse.core.resources.prefs'), settings.file('org.eclipse.jdt.apt.core.prefs'))
+    doLast {
+        def update = { String name, Map<String, String> values ->
+            def preferences = settings.file(name).asFile
+            def properties = new Properties()
+            if (preferences.exists()) {
+                preferences.withInputStream { properties.load(it) }
+            }
+            properties.setProperty('eclipse.preferences.version', '1')
+            values.each { key, value -> properties.setProperty(key, value) }
+            preferences.parentFile.mkdirs()
+            preferences.withOutputStream { properties.store(it, null) }
+        }
+        update('org.eclipse.core.resources.prefs', ['encoding/<project>': 'UTF-8'])
+        update('org.eclipse.jdt.apt.core.prefs', [
+            'org.eclipse.jdt.apt.aptEnabled': 'false',
+            'org.eclipse.jdt.apt.reconcileEnabled': 'false',
+            'org.eclipse.jdt.apt.genSrcDir': 'build/generated/sources/annotationProcessor/java/main',
+            'org.eclipse.jdt.apt.genTestSrcDir': 'build/generated/sources/annotationProcessor/java/test'
+        ])
+    }
+}
+
+eclipse {
+    synchronizationTasks 'compileJava', 'compileTestJava', 'eclipseJdt', 'eclipsePreferences'
+    autoBuildTasks 'compileJava', 'compileTestJava'
+    jdt {
+        // Annotation processing runs in Gradle; STS compiles its generated sources.
+        file.withProperties { properties ->
+            properties.setProperty('org.eclipse.jdt.core.compiler.processAnnotations', 'disabled')
+            properties.setProperty('org.eclipse.jdt.core.compiler.codegen.methodParameters', 'generate')
+        }
+    }
+    classpath.file.whenMerged { classpath ->
+        def generated = [
+            'build/generated/sources/annotationProcessor/java/main': 'main',
+            'build/generated/sources/annotationProcessor/java/test': 'test'
+        ]
+        classpath.entries.removeAll { entry ->
+            entry.kind == 'src' && (entry.path in generated.keySet() || entry.path in [
+                'bin/generated-sources/annotations', 'bin/generated-test-sources/annotations'
+            ])
+        }
+        generated.each { path, scope ->
+            def entry = new org.gradle.plugins.ide.eclipse.model.SourceFolder(path, "bin/${scope}")
+            entry.entryAttributes['ignore_optional_problems'] = 'true'
+            entry.entryAttributes['gradle_scope'] = scope
+            entry.entryAttributes['gradle_used_by_scope'] = scope == 'main' ? 'main,test' : 'test'
+            if (scope == 'test') {
+                entry.entryAttributes['test'] = 'true'
+            }
+            classpath.entries.add(entry)
+        }
+    }
+}
+
+tasks.named('eclipseClasspath') {
+    dependsOn 'compileJava', 'compileTestJava', 'eclipsePreferences'
 }
 
 tasks.named('bootTestRun') {

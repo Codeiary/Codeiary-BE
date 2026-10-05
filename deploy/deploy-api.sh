@@ -23,9 +23,11 @@ get_parameter() {
 }
 
 export IMAGE="$image"
-export POSTGRES_DB="$(get_parameter postgres-db)"
-export POSTGRES_USER="$(get_parameter postgres-user)"
-export POSTGRES_PASSWORD="$(get_parameter postgres-password)"
+POSTGRES_DB="$(get_parameter postgres-db)"
+POSTGRES_USER="$(get_parameter postgres-user)"
+POSTGRES_PASSWORD="$(get_parameter postgres-password)"
+JWT_SECRET="$(get_parameter jwt-secret)"
+export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD JWT_SECRET
 
 python3 - "$temporary_env" <<'PY'
 import os
@@ -37,7 +39,8 @@ def quote(value):
     return "'" + value.replace("'", "\\'") + "'"
 
 with open(sys.argv[1], "w", encoding="utf-8") as env_file:
-    for key in ("IMAGE", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"):
+    for key in ("IMAGE", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD",
+                "JWT_SECRET"):
         env_file.write(f"{key}={quote(os.environ[key])}\n")
 PY
 

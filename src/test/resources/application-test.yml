@@ -6,3 +6,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+
+auth:
+  token-cleanup:
+    enabled: false

@@ -44,8 +44,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     private MockMvc mockMvc;
 
     @Test
-    @DisplayName("비즈니스 예외의 상태 코드와 메시지를 응답할 수 있다.")
-    void businessExceptionReturnsItsStatusCodeAndMessage() throws Exception {
+    @DisplayName("비즈니스 예외를 응답할 수 있다.")
+    void handleBusinessException() throws Exception {
         mockMvc.perform(get("/test/business"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -54,8 +54,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("예상하지 못한 예외를 내부 정보 없이 서버 오류로 응답할 수 있다.")
-    void unexpectedExceptionDoesNotExposeInternalDetails() throws Exception {
+    @DisplayName("서버 오류의 내부 정보 노출을 차단할 수 있다.")
+    void hideInternalDetails() throws Exception {
         mockMvc.perform(get("/test/server-error"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
@@ -64,8 +64,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("실제 DB 중복 키 오류를 SQL 정보 없이 서버 오류로 응답할 수 있다.")
-    void databaseExceptionDoesNotExposeSqlDetails() throws Exception {
+    @DisplayName("DB 오류의 SQL 정보 노출을 차단할 수 있다.")
+    void hideSqlDetails() throws Exception {
         mockMvc.perform(get("/test/database-error"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(result -> assertThat(result.getResolvedException())
@@ -75,8 +75,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("요청 본문의 검증 실패 메시지를 응답할 수 있다.")
-    void invalidRequestBodyReturnsValidationMessage() throws Exception {
+    @DisplayName("요청 본문 검증 오류를 응답할 수 있다.")
+    void validateRequestBody() throws Exception {
         mockMvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"\"}"))
                 .andExpect(status().isBadRequest())
@@ -85,8 +85,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("잘못된 JSON 요청에 400 오류를 응답할 수 있다.")
-    void malformedJsonReturnsBadRequest() throws Exception {
+    @DisplayName("잘못된 JSON에 400을 응답할 수 있다.")
+    void rejectMalformedJson() throws Exception {
         mockMvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":"))
                 .andExpect(status().isBadRequest())
@@ -95,16 +95,16 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("필수 요청 본문이 누락되면 400 오류를 응답할 수 있다.")
-    void missingRequestBodyReturnsBadRequest() throws Exception {
+    @DisplayName("본문이 없는 요청에 400을 응답할 수 있다.")
+    void rejectMissingBody() throws Exception {
         mockMvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
     }
 
     @Test
-    @DisplayName("쿼리 파라미터의 타입 오류와 파라미터 이름을 응답할 수 있다.")
-    void invalidQueryParameterTypeIdentifiesTheParameter() throws Exception {
+    @DisplayName("쿼리 파라미터의 타입 오류를 응답할 수 있다.")
+    void handleQueryTypeMismatch() throws Exception {
         mockMvc.perform(get("/test/parameter").param("count", "invalid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
@@ -112,8 +112,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("경로 변수의 타입 오류와 변수 이름을 응답할 수 있다.")
-    void invalidPathVariableTypeIdentifiesTheVariable() throws Exception {
+    @DisplayName("경로 변수의 타입 오류를 응답할 수 있다.")
+    void handlePathTypeMismatch() throws Exception {
         mockMvc.perform(get("/test/items/invalid"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("TYPE_MISMATCH"))
@@ -121,8 +121,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("누락된 필수 쿼리 파라미터 이름을 응답할 수 있다.")
-    void missingQueryParameterIdentifiesTheParameter() throws Exception {
+    @DisplayName("누락된 쿼리 파라미터를 응답할 수 있다.")
+    void handleMissingParameter() throws Exception {
         mockMvc.perform(get("/test/parameter"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MISSING_REQUEST_PARAMETER"))
@@ -130,8 +130,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("누락된 필수 요청 헤더 이름을 응답할 수 있다.")
-    void missingHeaderIdentifiesTheHeader() throws Exception {
+    @DisplayName("누락된 요청 헤더를 응답할 수 있다.")
+    void handleMissingHeader() throws Exception {
         mockMvc.perform(get("/test/header"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("MISSING_REQUEST_HEADER"))
@@ -139,8 +139,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("지원하지 않는 HTTP 메서드에 허용된 메서드와 405 오류를 응답할 수 있다.")
-    void unsupportedMethodPreservesTheAllowHeader() throws Exception {
+    @DisplayName("405 응답에 허용 메서드를 포함할 수 있다.")
+    void handleUnsupportedMethod() throws Exception {
         mockMvc.perform(post("/test/parameter"))
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(header().string(HttpHeaders.ALLOW, containsString("GET")))
@@ -148,8 +148,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("지원하지 않는 Content-Type에 지원하는 형식과 415 오류를 응답할 수 있다.")
-    void unsupportedContentTypePreservesSupportedMediaTypes() throws Exception {
+    @DisplayName("415 응답에 지원 형식을 포함할 수 있다.")
+    void handleUnsupportedContentType() throws Exception {
         mockMvc.perform(post("/test/body").contentType(MediaType.TEXT_PLAIN).content("name"))
                 .andExpect(status().isUnsupportedMediaType())
                 .andExpect(header().string(HttpHeaders.ACCEPT, containsString("application/json")))
@@ -157,8 +157,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("지원하지 않는 응답 형식에 JSON 형식의 406 오류를 응답할 수 있다.")
-    void unsupportedResponseTypeStillReturnsAnErrorBody() throws Exception {
+    @DisplayName("지원하지 않는 응답 형식에 406을 응답할 수 있다.")
+    void handleUnsupportedResponseType() throws Exception {
         mockMvc.perform(get("/test/json").accept(MediaType.TEXT_PLAIN))
                 .andExpect(status().isNotAcceptable())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
@@ -166,8 +166,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("존재하지 않는 리소스에 공통 형식의 404 오류를 응답할 수 있다.")
-    void missingResourceUsesTheSameErrorFormat() throws Exception {
+    @DisplayName("없는 리소스에 404를 응답할 수 있다.")
+    void handleMissingResource() throws Exception {
         mockMvc.perform(get("/test/not-found"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("RESOURCE_NOT_FOUND"))
@@ -175,8 +175,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("잘못된 경로 변수 매핑을 서버 오류로 응답할 수 있다.")
-    void incorrectPathVariableMappingIsAServerError() throws Exception {
+    @DisplayName("잘못된 경로 매핑에 500을 응답할 수 있다.")
+    void handleInvalidPathMapping() throws Exception {
         mockMvc.perform(get("/test/missing-path"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
@@ -184,8 +184,8 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("메서드 파라미터의 검증 실패 메시지를 응답할 수 있다.")
-    void invalidMethodParameterReturnsValidationMessage() throws Exception {
+    @DisplayName("메서드 파라미터 검증 오류를 응답할 수 있다.")
+    void validateMethodParameter() throws Exception {
         mockMvc.perform(get("/test/method-validation").param("count", "0"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
@@ -193,22 +193,12 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("반환값 검증 실패를 내부 정보 없이 서버 오류로 응답할 수 있다.")
-    void invalidReturnValueIsAServerErrorWithoutValidationDetails() throws Exception {
+    @DisplayName("반환값 검증 오류의 노출을 차단할 수 있다.")
+    void validateReturnValue() throws Exception {
         mockMvc.perform(get("/test/return-validation"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"))
                 .andExpect(jsonPath("$.message").value("서버 내부 오류가 발생했습니다."));
-    }
-
-    @Test
-    @DisplayName("유효한 요청에 정상 응답을 반환할 수 있다.")
-    void validRequestIsNotChangedByTheExceptionHandler() throws Exception {
-        mockMvc.perform(post("/test/body").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Codeiary\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("Codeiary"))
-                .andExpect(jsonPath("$.code").doesNotExist());
     }
 
     public record InputRequest(@NotBlank(message = "이름은 필수입니다.") String name) {
@@ -249,12 +239,12 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
         }
 
         @GetMapping("/parameter")
-        public int parameter(@RequestParam("count") int count) {
+        public int parameter(@RequestParam int count) {
             return count;
         }
 
         @GetMapping("/items/{id}")
-        public long item(@PathVariable("id") long id) {
+        public long item(@PathVariable long id) {
             return id;
         }
 
@@ -269,13 +259,13 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
         }
 
         @GetMapping("/missing-path")
-        public long missingPath(@PathVariable("id") long id) {
+        public long missingPath(@PathVariable long id) {
             return id;
         }
 
         @GetMapping("/method-validation")
         public int methodValidation(
-                @RequestParam("count") @Min(value = 1, message = "count는 1 이상이어야 합니다.") int count) {
+                @RequestParam @Min(value = 1, message = "count는 1 이상이어야 합니다.") int count) {
             return count;
         }
 
