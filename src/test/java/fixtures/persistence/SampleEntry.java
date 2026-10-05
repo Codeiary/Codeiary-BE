@@ -1,5 +1,6 @@
 package fixtures.persistence;
 
+import com.codeiary.global.entity.TimeBaseEntity;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -13,7 +14,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "sample_entry")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class SampleEntry {
+public class SampleEntry extends TimeBaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -26,5 +27,9 @@ public class SampleEntry {
     public SampleEntry(String title, String category) {
         this.title = title;
         this.category = category;
+    }
+
+    public void rename(String title) {
+        this.title = title;
     }
 }
