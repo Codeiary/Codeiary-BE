@@ -249,12 +249,12 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
         }
 
         @GetMapping("/parameter")
-        public int parameter(@RequestParam("count") int count) {
+        public int parameter(@RequestParam int count) {
             return count;
         }
 
         @GetMapping("/items/{id}")
-        public long item(@PathVariable("id") long id) {
+        public long item(@PathVariable long id) {
             return id;
         }
 
@@ -269,13 +269,13 @@ class GlobalExceptionHandlerTest extends IntegrationTestSupport {
         }
 
         @GetMapping("/missing-path")
-        public long missingPath(@PathVariable("id") long id) {
+        public long missingPath(@PathVariable long id) {
             return id;
         }
 
         @GetMapping("/method-validation")
         public int methodValidation(
-                @RequestParam("count") @Min(value = 1, message = "count는 1 이상이어야 합니다.") int count) {
+                @RequestParam @Min(value = 1, message = "count는 1 이상이어야 합니다.") int count) {
             return count;
         }
 
