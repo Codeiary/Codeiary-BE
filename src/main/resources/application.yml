@@ -14,9 +14,12 @@ server:
   forward-headers-strategy: framework
   shutdown: graceful
 
+oauth2:
+  redirect-home: ${OAUTH2_REDIRECT_HOME:http://localhost:5173/auth/callback}
+
 token:
   jwt:
-    secret: ${TOKEN_JWT_SECRET:}
+    secret: ${TOKEN_JWT_SECRET:${JWT_SECRET:}}
     issuer: codeiary
     audience: codeiary-api
     access-token-ttl: 30m

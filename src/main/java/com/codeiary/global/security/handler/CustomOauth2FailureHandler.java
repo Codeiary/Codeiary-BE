@@ -2,9 +2,11 @@ package com.codeiary.global.security.handler;
 
 import java.io.IOException;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -12,9 +14,16 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class CustomOauth2FailureHandler implements AuthenticationFailureHandler {
 
+    @Value("${oauth2.redirect-home:http://localhost:5173/auth/callback}")
+    private String redirectHome;
+
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
             AuthenticationException exception) throws IOException {
-        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "소셜 로그인에 실패하였습니다.");
+        String redirectUrl = UriComponentsBuilder.fromUriString(redirectHome)
+                .queryParam("error", "oauth2")
+                .build()
+                .toUriString();
+        response.sendRedirect(redirectUrl);
     }
 }
