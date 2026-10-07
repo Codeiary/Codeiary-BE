@@ -1,11 +1,15 @@
 package com.codeiary.global.security.token.service;
 
+import com.codeiary.global.security.token.dto.TokenPair;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Optional;
 import org.springframework.http.ResponseCookie;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -42,6 +46,23 @@ public class TokenService {
 
     public Optional<String> refreshToken(HttpServletRequest request) {
         return find(request, properties.refreshName());
+    }
+
+    public void writeTokens(HttpServletResponse response, TokenPair pair) {
+        response.addHeader(HttpHeaders.SET_COOKIE, create(properties.accessName(), pair.accessToken(),
+                remainingAge(pair.accessExpiresAt(), properties.accessMaxAge())).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, create(properties.refreshName(), pair.refreshToken(),
+                remainingAge(pair.refreshExpiresAt(), properties.refreshMaxAge())).toString());
+    }
+
+    public void clearTokens(HttpServletResponse response) {
+        response.addHeader(HttpHeaders.SET_COOKIE, clearAccessToken().toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshToken().toString());
+    }
+
+    private Duration remainingAge(Instant expiresAt, Duration configuredMaxAge) {
+        Duration remaining = Duration.ofSeconds(Math.max(0, expiresAt.getEpochSecond() - Instant.now().getEpochSecond()));
+        return remaining.compareTo(configuredMaxAge) < 0 ? remaining : configuredMaxAge;
     }
 
     private ResponseCookie create(String name, String value, Duration maxAge) {

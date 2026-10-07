@@ -1,13 +1,10 @@
 package com.codeiary.global.security.token.cookie;
 
 import com.codeiary.domain.users.entity.User;
-import com.codeiary.domain.users.repository.UserRepository;
 import com.codeiary.global.exception.RestApiException;
-import com.codeiary.global.security.token.exception.TokenErrorCode;
-import com.codeiary.global.security.token.provider.JwtTokenProvider;
 import com.codeiary.global.security.token.service.TokenService;
+import com.codeiary.global.security.token.service.TokenSessionService;
 
-import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -25,17 +22,22 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public final class TokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final TokenService cookies;
-    private final JwtTokenProvider tokens;
-    private final UserRepository users;
+    private final TokenSessionService sessions;
 
     public TokenAuthenticationFilter(
             TokenService cookies,
-            JwtTokenProvider tokens,
-            UserRepository users
+            TokenSessionService sessions
     ) {
         this.cookies = cookies;
-        this.tokens = tokens;
-        this.users = users;
+        this.sessions = sessions;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String path = request.getServletPath();
+        return path.startsWith("/oauth2/") || path.startsWith("/login/")
+                || path.equals("/api/auth/reissue") || path.equals("/api/auth/refresh")
+                || path.equals("/api/auth/logout");
     }
 
     @Override
@@ -50,10 +52,7 @@ public final class TokenAuthenticationFilter extends OncePerRequestFilter {
 
     private void authenticate(HttpServletRequest request, String rawToken) {
         try {
-            Claims claims = tokens.validateAccessToken(rawToken);
-            User user = users.findById(Long.valueOf(claims.getSubject()))
-                    .filter(User::isEnabled)
-                    .orElseThrow(() -> new RestApiException(TokenErrorCode.TOKEN_INVALID));
+            User user = sessions.authenticate(rawToken);
             var authorities = List.of(
                     new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
             );
