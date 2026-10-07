@@ -35,9 +35,9 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(get("/api/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.info.title").value("Codeiary API"))
-                .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
+                .andExpect(jsonPath("$.components.securitySchemes.cookieAuth.in").value("cookie"))
                 .andExpect(jsonPath("$.paths['/api/users/me']").doesNotExist())
-                .andExpect(jsonPath("$.paths['/api/admin/me'].get.security[0].bearerAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/admin/me'].get.security[0].cookieAuth").isArray())
                 .andExpect(jsonPath("$.paths['/api/auth/login'].post.security").doesNotExist());
         mockMvc.perform(get("/api/v3/api-docs/swagger-config"))
                 .andExpect(status().isOk())

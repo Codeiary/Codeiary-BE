@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin")
 @RequiredArgsConstructor
 @Tag(name = "관리자")
-@SecurityRequirement(name = "bearerAuth")
+@SecurityRequirement(name = "cookieAuth")
 public class AdminController {
 
     private final AdminService adminService;
