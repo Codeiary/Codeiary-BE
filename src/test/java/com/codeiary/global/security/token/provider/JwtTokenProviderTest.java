@@ -1,9 +1,12 @@
 package com.codeiary.global.security.token.provider;
 
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.security.token.dto.TokenPair;
 import com.codeiary.global.security.token.exception.TokenErrorCode;
 import io.jsonwebtoken.Claims;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -57,7 +60,7 @@ class JwtTokenProviderTest {
     }
 
     @Test
-    @DisplayName("Access Token을 Refresh Token으로 검증할 수 없다.")
+    @DisplayName("Access Token을 사용한 재발급을 거절할 수 있다.")
     void rejectAccessTokenAsRefreshToken() {
         // given
         String accessToken = tokenProvider.generateAccessToken(1L, "USER", UUID.randomUUID());
@@ -93,6 +96,60 @@ class JwtTokenProviderTest {
                 .isInstanceOf(RestApiException.class)
                 .extracting(exception -> ((RestApiException) exception).getErrorCode())
                 .isEqualTo(TokenErrorCode.TOKEN_MISSING);
+    }
+
+    @Test
+    @DisplayName("다른 키로 서명한 토큰을 거절할 수 있다.")
+    void rejectDifferentSigningKey() {
+        // given
+        byte[] otherKey = new byte[32];
+        otherKey[0] = 1;
+        JwtTokenProvider otherProvider = new JwtTokenProvider(properties(),
+                new SecretKeySpec(otherKey, "HmacSHA256"));
+        String token = otherProvider.generateAccessToken(1L, "ADMIN", UUID.randomUUID());
+
+        // when & then
+        assertThatThrownBy(() -> tokenProvider.validateAccessToken(token))
+                .isInstanceOf(RestApiException.class)
+                .extracting(exception -> ((RestApiException) exception).getErrorCode())
+                .isEqualTo(TokenErrorCode.TOKEN_INVALID);
+    }
+
+    @Test
+    @DisplayName("Access Token 30분과 Refresh Token 7일의 만료 시간을 설정할 수 있다.")
+    void issueTokenPairWithConfiguredExpiry() {
+        // given
+        Instant before = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        // when
+        TokenPair pair = tokenProvider.generateTokenPair(1L, "USER", UUID.randomUUID());
+        Instant after = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+
+        // then
+        assertThat(pair.accessExpiresAt()).isBetween(before.plus(Duration.ofMinutes(30)),
+                after.plus(Duration.ofMinutes(30)));
+        assertThat(pair.refreshExpiresAt()).isBetween(before.plus(Duration.ofDays(7)),
+                after.plus(Duration.ofDays(7)));
+        assertThat(tokenProvider.validateAccessToken(pair.accessToken()).getExpiration().toInstant())
+                .isEqualTo(pair.accessExpiresAt());
+        assertThat(tokenProvider.validateRefreshToken(pair.refreshToken()).getExpiration().toInstant())
+                .isEqualTo(pair.refreshExpiresAt());
+    }
+
+    @Test
+    @DisplayName("Access Token의 만료를 남은 로그인 시간으로 제한할 수 있다.")
+    void capAccessTokenExpiryAtSessionExpiry() {
+        // given
+        Instant sessionExpiresAt = Instant.now().plusSeconds(60).truncatedTo(ChronoUnit.SECONDS);
+
+        // when
+        TokenPair pair = tokenProvider.generateTokenPair(1L, "USER", UUID.randomUUID(), sessionExpiresAt);
+
+        // then
+        assertThat(pair.accessExpiresAt()).isEqualTo(sessionExpiresAt);
+        assertThat(pair.refreshExpiresAt()).isEqualTo(sessionExpiresAt);
+        assertThat(tokenProvider.validateAccessToken(pair.accessToken()).getExpiration().toInstant())
+                .isEqualTo(sessionExpiresAt);
     }
 
     private TokenJwtProperties properties() {
