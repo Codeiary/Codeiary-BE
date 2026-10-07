@@ -41,86 +41,85 @@ springdoc-openapi 3.1.1로 Swagger UI를 제공합니다. 서버 실행 후:
 - OpenAPI JSON: `http://localhost:8080/api/v3/api-docs`
 
 문서와 정적 리소스는 운영 Nginx의 `/api/*` 프록시 경로를 사용합니다.
-Swagger는 인증 없이 조회할 수 있고, `Authorize`에 Access Token을 입력하면 인증이 필요한 API를 호출할 수 있습니다.
+Swagger는 인증 없이 조회할 수 있습니다. 인증 API는 로그인 후 브라우저에 설정된
+`access_token` 쿠키를 사용하며, OpenAPI에는 `cookieAuth`로 표시합니다.
 
-## JWT 로그인
+## OAuth2 로그인과 JWT 쿠키
 
-이메일·비밀번호를 검증하고 JJWT 0.13.0으로 JWT를 발급합니다.
-사용자 권한은 `Role.ADMIN`, `Role.USER`로 구분하며 DB에 문자열로 저장합니다.
-사용자 엔티티 Enum은 `domain/users/entity/enums` 패키지에서 관리합니다.
-이메일은 소문자로 입력해야 합니다. 대문자가 포함된 로그인 요청은 400으로 거절하며,
-이메일을 변환하거나 대소문자를 무시하여 조회하지 않습니다. DB도 소문자 이메일만 허용합니다.
-비밀번호는 8~20자이며 영문·숫자·특수문자 3개 이상을 포함해야 합니다.
-특수문자는 `!@#` 같은 ASCII 기호이며, 같은 기호를 반복해도 개수에 포함합니다.
-비밀번호는 BCrypt로 저장하고, Refresh Token 원문 대신 SHA-256 해시를 DB에 저장합니다.
+기존 이메일·비밀번호 로그인 API 대신 Google OAuth2/OIDC 로그인을 사용합니다.
+`/oauth2/authorization/google`에서 시작하며, 현재는 Google 이메일과 일치하는
+기존 활성 `users` 계정만 로그인할 수 있습니다. 신규 가입·닉네임 중복 확인·온보딩 API는 아직 없습니다.
+Google 설정에는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`이 필요하며,
+로그인 성공 후 이동할 주소는 `oauth2.redirect-home`으로 설정합니다.
 
-| 요청 | 경로 | 입력 / 인증 |
-| --- | --- | --- |
-| POST | `/api/auth/login` | JSON `email`, `password` |
-| POST | `/api/auth/refresh` | JSON `refreshToken` |
-| POST | `/api/auth/logout` | JSON `refreshToken` |
-| GET | `/api/admin/me` | ADMIN 권한의 `Authorization: Bearer <accessToken>` |
+로그인 성공 시 JJWT로 Access Token과 Refresh Token을 발급하고 `HttpOnly` 쿠키로 전달합니다.
+운영에서는 `Secure`, `SameSite=Strict`를 사용합니다. 쿠키 이름·경로·도메인 등은
+`src/main/resources/application.yml`의 `token.cookie`에서 설정합니다.
 
-로그인과 갱신 응답은 `accessToken`, `refreshToken`, `tokenType: "Bearer"`,
-`expiresIn`(초), `refreshExpiresIn`(초), `user`(`id`, `email`, `name`, `role`)를 포함합니다.
-Access Token은 30분, Refresh Token은 최초 로그인부터 7일 동안 유효하며 `src/main/resources/application.yml`의 `auth.jwt` 설정으로 변경할 수 있습니다.
-`AuthService`는 갱신 시 최초 만료 시점을 유지하고, 응답의 `refreshExpiresIn`에 남은 유효 시간(초)을 반환합니다.
-Access Token도 이 만료 시점을 넘지 않도록 발급하므로, 로그인 후 7일이 지나면 다시 로그인해야 합니다. JWT 발급은 `JwtTokenService`에서 처리합니다.
-갱신할 때 기존 Refresh Token은 폐기되고 새 토큰 쌍을 반환하므로 클라이언트는 둘 다 교체해야 합니다.
-동일한 Refresh Token을 동시에 갱신하면 하나의 요청만 성공합니다.
+| 요청 | 경로 | 입력 / 인증 | 성공 응답 |
+| --- | --- | --- | --- |
+| POST | `/api/auth/reissue` | `refresh_token` 쿠키, 본문 없음 | 204, 새 인증 쿠키 설정 |
+| POST | `/api/auth/refresh` | `/reissue`와 같은 동작 | 204, 새 인증 쿠키 설정 |
+| POST | `/api/auth/logout` | 인증 쿠키, 본문 없음 | 204, 인증 쿠키 삭제 |
+| GET | `/api/users/me` | USER·ADMIN 권한의 `access_token` 쿠키 | 사용자 프로필 JSON |
+| GET | `/api/admin/me` | ADMIN 권한의 `access_token` 쿠키 | 사용자 프로필 JSON |
 
-로그아웃은 204를 반환하고, 해당 로그인 식별자(`sid`)를 PostgreSQL의 `token_blacklist`에 등록합니다.
-같은 로그인에서 발급한 갱신 전·후 Access Token과 Refresh Token이 모두 즉시 차단됩니다.
-다른 기기의 별도 로그인은 유지됩니다. 클라이언트도 두 토큰을 삭제해야 합니다.
-로그아웃에는 JSON `refreshToken`만 보내면 되며 Authorization 헤더는 필요하지 않습니다.
-계정이 삭제되거나 비활성화되면
-Access Token 사용과 Refresh Token 갱신을 모두 차단합니다.
-`TokenCleanupService`는 매일 새벽 3시(Asia/Seoul)에 만료된 Refresh Token과 블랙리스트 기록을 삭제합니다.
-실행 시간은 `auth.token-cleanup`에서 변경합니다. 갱신으로 폐기된 Refresh Token도 최초 만료 시점까지 보관하여,
-이전 Refresh Token으로 로그아웃하더라도 같은 로그인의 토큰을 모두 차단할 수 있습니다.
-인증 오류는 401, 관리자 권한 부족은 403이며 기존 `{ "message": "...", "code": "..." }` 형식을 사용합니다.
-JWT의 `roles`와 응답의 `user.role`에는 사용자의 실제 권한이 포함됩니다.
-요청마다 DB의 현재 권한으로 접근을 판단하므로 ADMIN 토큰이 남아 있어도
-DB에서 USER로 변경하면 관리자 API 접근이 즉시 차단됩니다.
+토큰 재발급·로그아웃은 Access Token이 만료되어도 호출할 수 있습니다.
+재발급은 유효한 Refresh Token이 필요하며, 토큰 원문을 응답 JSON에 포함하지 않습니다.
+프론트는 `credentials: "include"`로 인증 쿠키를 보내고 `/api/users/me`로 로그인 상태를 복원합니다.
+로그인 후 이동 주소는 `OAUTH2_REDIRECT_HOME`으로 지정하며 프론트의 `/auth/callback`을 사용합니다.
 
-`/api/admin/me`는 로그인한 ADMIN이 자신의 정보를 조회하는 경로입니다.
-`domain/users/controller/AdminController`에서 관리하며 USER 권한은 403으로 거절합니다.
-`/api/admin/**`에는 ADMIN 권한이 필요합니다. 공개 GET `/api/**`와 로그인·갱신·로그아웃은
-인증 없이 호출할 수 있고, 나머지 요청은 인증이 필요합니다. HTTP 세션을 만들지 않으며,
-토큰을 쿠키가 아닌 요청 헤더·JSON 본문으로 전달하므로 CSRF 검사를 비활성화했습니다.
-프론트엔드의 목업 로그인은 별도로 이 API에 연결해야 합니다.
+Access Token은 30분, Refresh Token은 최초 로그인부터 7일 동안 유효합니다.
+`token.jwt.access-token-ttl`, `token.jwt.refresh-token-ttl`로 변경할 수 있습니다.
+재발급해도 최초 7일 만료 시점은 연장되지 않고, Access Token도 이 시점을 넘지 않습니다.
+Refresh Token은 원문 대신 SHA-256 해시를 DB에 저장하고, 재발급 시 기존 토큰을 폐기합니다.
+폐기된 Refresh Token을 다시 사용하면 해당 로그인 전체를 차단합니다.
+클라이언트는 동시에 여러 재발급 요청을 보내지 않아야 합니다.
 
-공통 인증 코드는 `global/auth`로 통합합니다. 로그인·갱신·로그아웃 API는 `controller`,
-인증 처리·JWT 발급·검증·블랙리스트·만료 기록 정리는 `service`에 둡니다.
-인증 필터는 `filter`, 인증·권한 오류 코드와 응답 처리기는 `exception`,
-JWT와 Spring Security 설정은 `config`에서 관리합니다.
-Refresh Token과 블랙리스트 엔티티·저장소는 `global/auth/entity`, `global/auth/repository`에 둡니다.
+로그아웃은 로그인 식별자(`sid`)를 PostgreSQL `token_blacklist`에 등록하여
+해당 로그인에서 발급한 Access Token·Refresh Token을 모두 차단합니다.
+다른 기기의 별도 로그인은 유지됩니다. 유효한 Refresh Token이 없으면 Access Token으로
+로그아웃할 수 있고, 유효한 토큰이 없어도 쿠키 삭제와 204 응답을 반환합니다.
+계정이 삭제되거나 비활성화되면 인증과 재발급을 차단하며,
+요청마다 DB의 현재 권한을 사용하므로 권한 변경도 다음 요청부터 반영됩니다.
+`TokenCleanupService`가 매일 새벽 3시(Asia/Seoul)에 만료된 토큰과 블랙리스트 기록을 삭제합니다.
+실행 시간과 활성화 여부는 `auth.token-cleanup.cron`, `auth.token-cleanup.enabled`로 설정합니다.
+
+`/api/admin/**`에는 ADMIN 권한이 필요합니다. 공개 GET `/api/**`, OAuth2 진입·콜백,
+재발급·로그아웃을 제외한 요청은 인증이 필요합니다. 인증 오류는 401, 권한 부족은 403이며
+기존 `{ "message": "...", "code": "..." }` 형식을 사용합니다.
+현재 CSRF 검사는 비활성화되어 있고, 인증 쿠키의 SameSite 기본값은 Strict입니다.
+
+공통 인증 코드는 `global/security`에 둡니다. OAuth2 사용자 조회는 `service`,
+로그인 결과 처리는 `handler`에서 담당합니다. 재발급·로그아웃 API는
+`global/security/token/controller/TokenController`에 둡니다.
+`global/security/token`의 `service/TokenSessionService`는 로그인 세션·재발급·폐기를,
+`service/TokenService`는 쿠키 처리를 담당합니다. JWT 생성·검증은 `provider`,
+인증 필터는 `cookie`, 토큰 엔티티와 저장소는 `entity`, `repository`에서 관리합니다.
+
 사용자 모델·권한·저장소와 관리자 API는 `domain/users`에서 관리합니다.
-인증 필터가 JWT의 `subject`를 `Long`으로 변환해 `global/auth/service/AuthService.loadActiveUser(Long userId)`로 사용자를 조회합니다.
-`AuthService`가 사용자 없음·비활성 상태를 인증 실패 예외로 처리하고, 인증 필터는 이를 401 응답으로 연결합니다.
-인증 필터는 조회·검증한 `User` 엔티티를 인증 principal로 저장합니다.
-관리자 컨트롤러는 `@AuthenticationPrincipal User user`를 받아 `domain/users/service/AdminService`에 위임합니다.
-`AdminService.getProfile(User user)`가 `UserMapper`로 사용자 응답을 만들며 추가 DB 조회를 하지 않습니다.
-API에는 사용자 ID·이메일·이름·권한만 담은 응답 DTO를 반환하며 엔티티의 비밀번호 해시는 포함하지 않습니다.
-사용자 응답은 `domain/users/dto/response/UserProfileResponse`, 엔티티 변환은 `domain/users/dto/UserMapper`에 둡니다.
-인증 요청 DTO는 `global/auth/dto/request`, 토큰 응답은 `global/auth/dto/response`에 둡니다.
-`global/auth/dto/AuthMapper`는 `User` 엔티티와 토큰 정보를 받아 토큰 응답을 생성합니다.
-중첩된 사용자 응답 변환은 `uses = UserMapper.class`로 위임하므로 서비스에서 DTO로 먼저 변환하지 않습니다.
-두 매퍼는 공통 `MapStructConfig`를 사용하며 Spring이 생성자로 의존성을 주입합니다.
+인증 필터는 검증한 `User`를 principal로 저장하고, 관리자 컨트롤러는
+`@AuthenticationPrincipal User user`를 받아 `AdminService`에 위임합니다.
+`UserMapper`가 `UserProfileResponse`로 변환합니다.
+프론트 모델에 맞춰 응답은 `id`, `email`, `name`, `nickname`, `profileImageUrl`,
+`onboardingCompleted`, `role`을 포함합니다. 실명과 닉네임은 별도 필드이며,
+닉네임은 한글·영문·숫자·밑줄 2~20자로 대소문자를 구분하지 않고 중복을 제한합니다.
+프로필 이미지는 선택 사항이고, 온보딩 완료 여부는 닉네임 설정 여부로 계산합니다.
 
 ### 사용자 계정과 JWT 키
 
-사용자 계정은 `users` 테이블에 직접 등록합니다. `email`에는 소문자 이메일,
-`password_hash`에는 `BCryptPasswordEncoder`로 생성한 비밀번호 해시를 저장합니다.
-비밀번호는 위의 로그인 입력 규칙을 만족해야 합니다. `name`, `enabled`, `created_at`, `updated_at`도
-설정해야 하며, `id`는 DB가 자동 생성합니다. 로그인 API는 등록된 활성 계정을 검증합니다.
-관리자 계정의 `role`은 `ADMIN`으로 지정합니다. 권한을 생략한 새 계정은 `USER`입니다.
+사용자 계정은 `users` 테이블에 직접 등록합니다. 소문자 `email`, `name`,
+`enabled`, `created_at`, `updated_at`을 설정하며 `id`는 DB가 자동 생성합니다.
+Google OAuth2 전용이므로 사용자 비밀번호를 보관하지 않습니다.
+관리자 계정의 `role`은 `ADMIN`으로 지정하고, 생략하면 `USER`입니다.
+닉네임·프로필 이미지가 없는 기존 계정은 그대로 유지됩니다.
 로컬 임시 DB(`bootTestRun`)는 종료 시 정리되므로 계정을 유지하려면 기존 DB에 연결합니다.
 
-운영 환경의 `JWT_SECRET`은 `openssl rand -base64 32`로 생성한 값을 사용합니다.
+운영 애플리케이션의 `TOKEN_JWT_SECRET`은 `openssl rand -base64 32`로 생성한 값을 사용합니다.
+`TOKEN_JWT_SECRET`을 우선 사용하며 기존 배포의 `JWT_SECRET`도 대체 설정으로 지원합니다.
 설정이 없거나 Base64 디코딩 후 32바이트보다 짧으면 운영 서버 시작을 거절합니다.
-모든 API 인스턴스는 같은 키를 사용해야 하며 키를 변경하면 기존 Access Token이 무효화됩니다.
-`local`·`test`에서는 키를 생략하면 실행마다 임시 키를 생성합니다.
+모든 API 인스턴스는 같은 키를 사용해야 하며, 키를 변경하면 기존 Access Token과 Refresh Token이 무효화됩니다.
+운영 이외 환경에서는 키를 생략하면 실행마다 임시 키를 생성합니다.
 
 ## 로컬 실행
 
@@ -148,28 +147,11 @@ Java 21과 Docker를 실행한 상태에서 `./gradlew test`로 전체 테스트
 DB 환경 변수나 별도의 PostgreSQL 실행은 필요하지 않습니다.
 컨테이너는 테스트 컨텍스트 종료 시 정리됩니다.
 
-새 통합 테스트는 `IntegrationTestSupport`를 상속하면 테스트 프로필과 DB 설정을
-공유할 수 있습니다. 예외 처리 테스트는 실제 PostgreSQL 중복 키 오류의 HTTP 응답도 검증합니다.
-코드 생성 테스트는 테스트 전용 엔티티로 QueryDSL 조회와 생성·수정 시간 기록을 확인합니다.
-MapStruct 변환은 실제 `AuthMapper`와 `UserMapper`를 사용하는 인증 서비스 테스트에서 검증합니다.
-Swagger 테스트는 문서·UI 리소스 접근과 공개 조회·인증 없는 변경 요청 차단을 확인합니다.
-인증 테스트는 `global/auth/repository`, `global/auth/service`, `global/auth/controller`로 나눕니다.
-사용자 저장소 테스트는 `domain/users/repository`, 관리자 API 테스트는 `domain/users/controller`에 두며, 컨트롤러 테스트의 공통 설정은
-`support/ControllerTestSupport`를 사용합니다. 각 테스트는 자신의 컨트롤러를 지정합니다.
-Refresh Token과 블랙리스트 저장소 테스트는 `global/auth/repository`에 둡니다.
-Repository 테스트는 `@DataJpaTest`와 실제 PostgreSQL로 조회·유일성·잠금을 검증합니다.
-Service 테스트는 Mockito로 비밀번호 검증·토큰 발급·폐기를 확인하고,
-JWT 검증은 `global/auth/service`에서 실제 JJWT로 테스트합니다.
-동시 갱신은 Service 통합 테스트에서 PostgreSQL로 검증합니다.
-Controller 테스트는 `@WebMvcTest`로 요청 검증·HTTP 응답과 JWT 인증을 확인합니다.
-관리자 접근 제어와 DB 권한 변경 반영은 `domain/users/controller/AdminControllerTest`에서 검증합니다.
-
+통합 테스트는 `IntegrationTestSupport`로 DB 설정을 공유합니다.
+예외 처리·OpenAPI·코드 생성·사용자 저장소 테스트와,
+`global/security/token`의 JWT 검증·쿠키 처리·로그아웃·토큰 재발급·블랙리스트 단위 테스트가 있습니다.
 사용자 테스트 객체는 `domain/users/fixture/UserFixture`에서 관리합니다.
-인증 테스트 객체는 `global/auth/fixture`의 `AuthRequestFixture`, `AuthResponseFixture`,
-`JwtFixture`, `RefreshTokenFixture` 팩토리로 기본 객체를 생성하고,
-특정 입력이나 만료·폐기 상태가 필요한 경우 해당 팩토리에 값을 전달합니다.
-엔티티와 JWT 빌더는 호출마다 새 객체를 생성하고, 고정 시각·기본 값은 Fixture에 모읍니다.
-테스트 대상 서비스 생성과 DB 저장은 각 테스트에서 명시적으로 수행합니다.
+새 인증 테스트는 mock 저장소와 MockMvc를 사용하며 DB 없이 실행할 수 있습니다.
 
 테스트는 `// given`, `// when`, `// then`으로 준비·실행·검증을 구분합니다.
 Mock 설정은 BDDMockito `given(...).willReturn(...)` / `willThrow(...)`를,
@@ -218,7 +200,7 @@ IAM role에 연결해야 합니다. 이 정책은 해당 경로에서 `ssm:GetPa
 `kms:Decrypt`만 허용합니다. 배포 스크립트는 값을 `/run`의 임시 Compose env 파일로
 받아 컨테이너를 갱신한 뒤 파일을 삭제합니다. 앱 이미지는 비밀값을 포함하지 않습니다.
 
-JWT 로그인 배포 전에 다음 파라미터도 준비합니다.
+JWT 쿠키 인증 배포 전에 다음 파라미터도 준비합니다.
 
 - `/codeiary/prod/jwt-secret`: Base64로 인코딩한 32바이트 이상의 랜덤 키 (`SecureString`)
 
@@ -229,9 +211,11 @@ sudo install -m 644 compose.yaml /opt/codeiary/compose.yaml
 sudo install -m 755 deploy/deploy-api.sh /usr/local/sbin/codeiary-deploy-api
 ```
 
-Flyway의 `V1__create_auth_tables.sql`이 `users`, `refresh_tokens`, `token_blacklist`와
-관련 제약 조건·인덱스를 생성합니다. 새 계정의 기본 권한은 `USER`이며,
-관리자 계정은 `role`을 `ADMIN`으로 지정합니다.
+Flyway의 `V1__create_auth_tables.sql` 하나로 `users`, `refresh_tokens`, `token_blacklist`와
+관련 제약 조건·인덱스를 생성합니다. 닉네임·프로필 이미지와 대소문자를 구분하지 않는
+닉네임 중복 방지 인덱스를 포함하며 사용자 비밀번호 컬럼은 없습니다.
+DB를 초기화하고 적용하는 기준 스키마이므로 기존 DB의 `flyway_schema_history`도 함께 초기화해야 합니다.
+새 계정의 기본 권한은 `USER`이며, 관리자 계정은 `role`을 `ADMIN`으로 지정합니다.
 
 운영 인스턴스는 Lightsail `small_3_0` 플랜(2GB RAM)입니다. 방화벽은 `22`, `80`, `443`만
 허용하고 `8080`, `5432`는 열지 않습니다.

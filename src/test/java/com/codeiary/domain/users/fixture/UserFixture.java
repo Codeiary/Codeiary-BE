@@ -3,18 +3,13 @@ package com.codeiary.domain.users.fixture;
 import com.codeiary.domain.users.dto.response.UserProfileResponse;
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.domain.users.entity.enums.Role;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 public final class UserFixture {
 
     public static final long ID = 1L;
     public static final String EMAIL = "admin@example.com";
-    public static final String PASSWORD = "Codeiary123!@#";
-    public static final String WRONG_PASSWORD = "Wrongpass123!@#";
     public static final String NAME = "김원석";
-    private static final String PASSWORD_HASH = passwordEncoder().encode(PASSWORD);
 
     private UserFixture() {
     }
@@ -24,19 +19,15 @@ public final class UserFixture {
     }
 
     public static User create(String email) {
-        return new User(email, PASSWORD_HASH, NAME, Role.ADMIN);
+        return new User(email, NAME, Role.ADMIN);
     }
 
     public static User create(Role role) {
-        return new User(EMAIL, PASSWORD_HASH, NAME, role);
+        return new User(EMAIL, NAME, role);
     }
 
     public static User createDefaultUser() {
-        return new User(EMAIL, PASSWORD_HASH, NAME);
-    }
-
-    public static User create(PasswordEncoder encoder) {
-        return new User(EMAIL, encoder.encode(PASSWORD), NAME, Role.ADMIN);
+        return new User(EMAIL, NAME);
     }
 
     public static User createWithId() {
@@ -54,10 +45,6 @@ public final class UserFixture {
     }
 
     public static UserProfileResponse response(Role role) {
-        return new UserProfileResponse(ID, EMAIL, NAME, role);
-    }
-
-    public static PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder(4);
+        return new UserProfileResponse(ID, EMAIL, NAME, null, null, false, role);
     }
 }

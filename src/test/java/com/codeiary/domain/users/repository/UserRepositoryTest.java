@@ -49,8 +49,8 @@ class UserRepositoryTest extends RepositoryTestSupport {
 
         // when
         Long id = users.saveAndFlush(user).getId();
-        jdbc.update("insert into users(email, password_hash, name, created_at, updated_at) values (?, ?, ?, now(), now())",
-                directEmail, user.getPasswordHash(), user.getName());
+        jdbc.update("insert into users(email, name, created_at, updated_at) values (?, ?, now(), now())",
+                directEmail, user.getName());
         entityManager.clear();
         var saved = users.findById(id);
         var direct = users.findByEmail(directEmail);

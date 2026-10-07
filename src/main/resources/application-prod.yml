@@ -4,6 +4,15 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
 
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope: openid,profile,email
+
   jpa:
     hibernate:
       ddl-auto: validate
@@ -15,3 +24,8 @@ spring:
 
 server:
   port: 8080
+
+token:
+  cookie:
+    secure: true
+    same-site: Strict

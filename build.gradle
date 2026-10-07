@@ -48,9 +48,11 @@ dependencies {
 
     // Security
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-client'
     testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 
-    // JWT (email/password authentication)
+
+    // JWT
     implementation "io.jsonwebtoken:jjwt-api:${jjwtVersion}"
     runtimeOnly "io.jsonwebtoken:jjwt-impl:${jjwtVersion}"
     runtimeOnly "io.jsonwebtoken:jjwt-gson:${jjwtVersion}"
