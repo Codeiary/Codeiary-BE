@@ -1,6 +1,7 @@
 package com.codeiary.global.security.token.provider;
 
 import com.codeiary.global.security.token.exception.TokenErrorCode;
+import com.codeiary.global.security.token.dto.TokenPair;
 import com.codeiary.global.exception.RestApiException;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -9,6 +10,7 @@ import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.UUID;
 import javax.crypto.SecretKey;
@@ -36,11 +38,31 @@ public final class JwtTokenProvider {
     }
 
     public String generateAccessToken(Long userId, String role, UUID sessionId) {
-        return generate(userId, role, sessionId, "access", properties.accessTokenTtl());
+        return generate(userId, role, sessionId, "access", clock.instant().plus(properties.accessTokenTtl()));
     }
 
     public String generateRefreshToken(Long userId, String role, UUID sessionId) {
-        return generate(userId, role, sessionId, "refresh", properties.refreshTokenTtl());
+        return generate(userId, role, sessionId, "refresh", clock.instant().plus(properties.refreshTokenTtl()));
+    }
+
+    public TokenPair generateTokenPair(Long userId, String role, UUID sessionId) {
+        return generateTokenPair(userId, role, sessionId,
+                clock.instant().plus(properties.refreshTokenTtl()).truncatedTo(ChronoUnit.SECONDS));
+    }
+
+    public TokenPair generateTokenPair(Long userId, String role, UUID sessionId, Instant refreshExpiresAt) {
+        Instant now = clock.instant();
+        if (!refreshExpiresAt.isAfter(now)) {
+            throw new RestApiException(TokenErrorCode.TOKEN_EXPIRED);
+        }
+        Instant accessExpiresAt = now.plus(properties.accessTokenTtl()).truncatedTo(ChronoUnit.SECONDS);
+        if (accessExpiresAt.isAfter(refreshExpiresAt)) {
+            accessExpiresAt = refreshExpiresAt;
+        }
+        return new TokenPair(
+                generate(userId, role, sessionId, "access", accessExpiresAt),
+                generate(userId, role, sessionId, "refresh", refreshExpiresAt),
+                accessExpiresAt, refreshExpiresAt);
     }
 
     public Claims validateAccessToken(String token) {
@@ -52,7 +74,7 @@ public final class JwtTokenProvider {
     }
 
     private String generate(Long userId, String role, UUID sessionId,
-                            String tokenUse, java.time.Duration ttl) {
+                            String tokenUse, Instant expiresAt) {
         Instant issuedAt = clock.instant();
         return Jwts.builder()
                 .header().type("JWT").and()
@@ -61,7 +83,7 @@ public final class JwtTokenProvider {
                 .subject(String.valueOf(userId))
                 .issuedAt(Date.from(issuedAt))
                 .notBefore(Date.from(issuedAt))
-                .expiration(Date.from(issuedAt.plus(ttl)))
+                .expiration(Date.from(expiresAt))
                 .id(UUID.randomUUID().toString())
                 .claim("sid", sessionId.toString())
                 .claim("role", role)
@@ -81,7 +103,8 @@ public final class JwtTokenProvider {
             }
             String subject = claims.getSubject();
             String sessionId = claims.get("sid", String.class);
-            if (subject == null || sessionId == null) {
+            if (subject == null || sessionId == null || claims.getExpiration() == null
+                    || claims.getId() == null || claims.getId().isBlank()) {
                 throw new RestApiException(TokenErrorCode.TOKEN_INVALID);
             }
             Long.parseLong(subject);
