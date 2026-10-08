@@ -67,8 +67,13 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.paths['/api/users/me/onboarding'].post.requestBody.content['multipart/form-data']").exists())
                 .andExpect(jsonPath("$.paths['/api/users/me/onboarding'].post.requestBody.content['application/json']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/users/me/profile'].put.security[0].cookieAuth").isArray())
-                .andExpect(jsonPath("$.paths['/api/users/me/profile-image'].post.security[0].cookieAuth").isArray())
-                .andExpect(jsonPath("$.paths['/api/users/me/profile-image'].post.requestBody.content['multipart/form-data']").exists())
+                .andExpect(jsonPath("$.paths['/api/images/presigned-url'].post.security[0].cookieAuth").isArray())
+                .andExpect(jsonPath("$.paths['/api/images/presigned-url'].post.requestBody.content['application/json']").exists())
+                .andExpect(jsonPath("$.paths['/api/images/presigned-url'].post.responses['200']").exists())
+                .andExpect(jsonPath("$.components.schemas.ImageUploadResponse.properties.imageUrl.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.ImageUploadResponse.properties.uploadUrl.type").value("string"))
+                .andExpect(jsonPath("$.components.schemas.ImageUploadResponse.properties.headers.type").value("object"))
+                .andExpect(jsonPath("$.paths['/api/users/me/profile-image']").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/users/{userId}'].get.security").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/users/by-nickname/{nickname}'].get.security").doesNotExist())
                 .andExpect(jsonPath("$.paths['/api/admin/me'].get.security[0].cookieAuth").isArray())
@@ -106,6 +111,16 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
     }
 
     @Test
+    @DisplayName("인증이 없는 이미지 업로드를 차단할 수 있다.")
+    void rejectAnonymousImageUpload() throws Exception {
+        // when & then
+        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contentType\":\"image/png\",\"contentLength\":128}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     @DisplayName("공개 프로필과 인증이 필요한 사용자 기능을 구분할 수 있다.")
     void protectUserProfileRequests() throws Exception {
         // given
@@ -115,8 +130,6 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
         mockMvc.perform(get("/api/users/nickname-availability").param("nickname", "기록자"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(multipart("/api/users/me/onboarding").param("nickname", "기록자"))
-                .andExpect(status().isUnauthorized());
-        mockMvc.perform(multipart("/api/users/me/profile-image"))
                 .andExpect(status().isUnauthorized());
         mockMvc.perform(put("/api/users/me/profile")
                         .contentType(MediaType.APPLICATION_JSON).content(profile))
@@ -187,8 +200,11 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isForbidden());
         mockMvc.perform(get("/api/admin/me").cookie(accessCookie))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(multipart("/api/users/me/profile-image").cookie(accessCookie))
-                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contentType\":\"image/gif\",\"contentLength\":128}")
+                        .cookie(accessCookie))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("DENIED_ACCESS"));
     }
 
     @ParameterizedTest
@@ -205,6 +221,11 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/admin/me").cookie(accessCookie))
                 .andExpect(role == Role.ADMIN ? status().isOk() : status().isForbidden());
+        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"contentType\":\"image/gif\",\"contentLength\":128}")
+                        .cookie(accessCookie))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_IMAGE"));
     }
 
     @ParameterizedTest
