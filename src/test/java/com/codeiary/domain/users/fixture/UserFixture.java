@@ -45,6 +45,6 @@ public final class UserFixture {
     }
 
     public static UserProfileResponse response(Role role) {
-        return new UserProfileResponse(ID, EMAIL, NAME, null, null, false, role);
+        return new UserProfileResponse(ID, EMAIL, NAME, null, null, role != Role.PENDING, role, null, null);
     }
 }

@@ -27,24 +27,26 @@ class UserMapperTest {
         // then
         assertThat(response).isEqualTo(new UserProfileResponse(
                 UserFixture.ID, UserFixture.EMAIL, UserFixture.NAME,
-                "원석", "https://example.com/profile.png", true, Role.USER));
+                "원석", "https://example.com/profile.png", true, Role.USER, null, null));
     }
 
     @Test
-    @DisplayName("프로필 사진 없이 닉네임으로 온보딩 완료 여부를 구분할 수 있다.")
+    @DisplayName("권한으로 온보딩 완료 여부를 구분할 수 있다.")
     void mapOnboardingStatus() {
         // given
-        User user = UserFixture.createWithId();
+        User user = UserFixture.createWithId(Role.PENDING);
 
         // when
         UserProfileResponse before = mapper.toResponse(user);
-        user.updateProfile("원석", null);
+        user.completeOnboarding("원석");
         UserProfileResponse after = mapper.toResponse(user);
 
         // then
         assertThat(before.onboardingCompleted()).isFalse();
+        assertThat(before.role()).isEqualTo(Role.PENDING);
         assertThat(before.nickname()).isNull();
         assertThat(after.onboardingCompleted()).isTrue();
+        assertThat(after.role()).isEqualTo(Role.USER);
         assertThat(after.profileImageUrl()).isNull();
     }
 }

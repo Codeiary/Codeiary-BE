@@ -41,8 +41,8 @@ class UserRepositoryTest extends RepositoryTestSupport {
     }
 
     @Test
-    @DisplayName("새 계정의 기본 권한을 USER로 설정할 수 있다.")
-    void defaultToUserRole() {
+    @DisplayName("새 계정의 기본 권한을 PENDING으로 설정할 수 있다.")
+    void defaultToPendingRole() {
         // given
         var user = UserFixture.createDefaultUser();
         String directEmail = "direct@example.com";
@@ -56,8 +56,8 @@ class UserRepositoryTest extends RepositoryTestSupport {
         var direct = users.findByEmail(directEmail);
 
         // then
-        assertThat(saved).hasValueSatisfying(account -> assertThat(account.getRole()).isEqualTo(Role.USER));
-        assertThat(direct).hasValueSatisfying(account -> assertThat(account.getRole()).isEqualTo(Role.USER));
+        assertThat(saved).hasValueSatisfying(account -> assertThat(account.getRole()).isEqualTo(Role.PENDING));
+        assertThat(direct).hasValueSatisfying(account -> assertThat(account.getRole()).isEqualTo(Role.PENDING));
     }
 
     @Test
@@ -134,5 +134,87 @@ class UserRepositoryTest extends RepositoryTestSupport {
 
         // then
         assertThat(error).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("공개 프로필 정보를 저장하고 다시 조회할 수 있다.")
+    void savePublicProfile() {
+        // given
+        var account = users.saveAndFlush(UserFixture.createDefaultUser());
+
+        // when
+        account.updatePublicProfile("CodeWriter", "https://example.com/profile.png",
+                "https://github.com/code-writer", "contact@example.com");
+        users.flush();
+        entityManager.clear();
+        var loaded = users.findById(account.getId());
+
+        // then
+        assertThat(loaded).hasValueSatisfying(saved -> {
+            assertThat(saved.getNickname()).isEqualTo("CodeWriter");
+            assertThat(saved.getProfileImageUrl()).isEqualTo("https://example.com/profile.png");
+            assertThat(saved.getGithubUrl()).isEqualTo("https://github.com/code-writer");
+            assertThat(saved.getContactEmail()).isEqualTo("contact@example.com");
+        });
+    }
+
+    @Test
+    @DisplayName("대소문자만 다른 중복 닉네임의 저장을 거절할 수 있다.")
+    void rejectCaseInsensitiveDuplicateNickname() {
+        // given
+        var account = UserFixture.create();
+        account.updateProfile("CodeWriter", null);
+        users.saveAndFlush(account);
+        var duplicate = UserFixture.create("another@example.com");
+        duplicate.updateProfile("codewriter", null);
+
+        // when
+        Throwable error = catchThrowable(() -> users.saveAndFlush(duplicate));
+
+        // then
+        assertThat(error).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("같은 OAuth 계정의 다른 이메일 가입을 거절할 수 있다.")
+    void rejectDuplicateOAuthIdentity() {
+        // given
+        var account = UserFixture.createDefaultUser();
+        account.linkOAuthAccount("google", "google-user-123");
+        Long id = users.saveAndFlush(account).getId();
+        entityManager.clear();
+        var duplicate = UserFixture.create("another@example.com");
+        duplicate.linkOAuthAccount("google", "google-user-123");
+
+        // when
+        var existing = users.findByOauthProviderAndOauthSubject("google", "google-user-123");
+        Throwable error = catchThrowable(() -> users.saveAndFlush(duplicate));
+
+        // then
+        assertThat(existing).hasValueSatisfying(saved -> assertThat(saved.getId()).isEqualTo(id));
+        assertThat(error).isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
+    @DisplayName("대소문자 없이 닉네임을 조회하고 본인의 닉네임을 중복 검사에서 제외할 수 있다.")
+    void findNicknameAndExcludeOwner() {
+        // given
+        var account = UserFixture.createDefaultUser();
+        account.updateProfile("CodeWriter", null);
+        Long ownerId = users.saveAndFlush(account).getId();
+        Long otherId = users.saveAndFlush(UserFixture.create("another@example.com")).getId();
+        entityManager.clear();
+
+        // when
+        var found = users.findByNicknameIgnoreCase("codewriter");
+        boolean duplicateForOwner = users.existsByNicknameIgnoreCaseAndIdNot("CODEWRITER", ownerId);
+        boolean duplicateForOther = users.existsByNicknameIgnoreCaseAndIdNot("codewriter", otherId);
+        boolean unknownNickname = users.existsByNicknameIgnoreCaseAndIdNot("NewWriter", ownerId);
+
+        // then
+        assertThat(found).hasValueSatisfying(saved -> assertThat(saved.getId()).isEqualTo(ownerId));
+        assertThat(duplicateForOwner).isFalse();
+        assertThat(duplicateForOther).isTrue();
+        assertThat(unknownNickname).isFalse();
     }
 }
