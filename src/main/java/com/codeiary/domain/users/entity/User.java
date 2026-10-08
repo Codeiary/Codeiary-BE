@@ -42,21 +42,43 @@ public class User extends TimeBaseEntity {
     @Size(max = 2048)
     private String profileImageUrl;
 
+    @Column(length = 255)
+    private String githubUrl;
+
+    @Column(length = 254)
+    private String contactEmail;
+
+    @Column(length = 20)
+    private String oauthProvider;
+
+    @Column(length = 255)
+    private String oauthSubject;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private Role role = Role.USER;
+    private Role role = Role.PENDING;
 
     @Column(nullable = false)
     private boolean enabled = true;
 
     public User(String email, String name) {
-        this(email, name, Role.USER);
+        this(email, name, Role.PENDING);
     }
 
     public User(String email, String name, Role role) {
         this.email = email;
         this.name = name;
         this.role = Objects.requireNonNull(role);
+    }
+
+    public User(String email, String name, String oauthProvider, String oauthSubject) {
+        this(email, name);
+        linkOAuthAccount(oauthProvider, oauthSubject);
+    }
+
+    public void linkOAuthAccount(String provider, String subject) {
+        this.oauthProvider = provider;
+        this.oauthSubject = subject;
     }
 
     public void disable() {
@@ -68,7 +90,21 @@ public class User extends TimeBaseEntity {
         this.profileImageUrl = profileImageUrl;
     }
 
+    public void completeOnboarding(String nickname) {
+        this.nickname = nickname;
+        if (role == Role.PENDING) {
+            role = Role.USER;
+        }
+    }
+
+    public void updatePublicProfile(String nickname, String profileImageUrl,
+                                   String githubUrl, String contactEmail) {
+        updateProfile(nickname, profileImageUrl);
+        this.githubUrl = githubUrl;
+        this.contactEmail = contactEmail;
+    }
+
     public boolean isOnboardingCompleted() {
-        return nickname != null && !nickname.isBlank();
+        return role != Role.PENDING;
     }
 }

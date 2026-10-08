@@ -1,6 +1,8 @@
 package com.codeiary.global.security.handler;
 
+import com.codeiary.domain.users.entity.User;
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.security.service.OAuthUserService;
 import com.codeiary.global.security.token.dto.TokenPair;
 import com.codeiary.global.security.token.service.TokenService;
 import com.codeiary.global.security.token.service.TokenSessionService;
@@ -9,7 +11,6 @@ import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CustomOauth2SuccessHandler implements AuthenticationSuccessHandler {
 
+    private final OAuthUserService oauthUsers;
     private final TokenSessionService sessions;
     private final TokenService cookieService;
     private final CustomOauth2FailureHandler failureHandler;
@@ -39,15 +41,10 @@ public class CustomOauth2SuccessHandler implements AuthenticationSuccessHandler 
                     new BadCredentialsException("Unavailable OAuth user"));
             return;
         }
-        String email = oauth2User.getEmail();
-        if (email == null || email.isBlank()) {
-            failureHandler.onAuthenticationFailure(request, response,
-                    new BadCredentialsException("Missing OAuth email"));
-            return;
-        }
         TokenPair pair;
         try {
-            pair = sessions.createSession(email.toLowerCase(Locale.ROOT));
+            User user = oauthUsers.getOrCreate(oauth2User);
+            pair = sessions.createSession(user.getEmail());
         } catch (RestApiException exception) {
             failureHandler.onAuthenticationFailure(request, response,
                     new BadCredentialsException("Unavailable user", exception));

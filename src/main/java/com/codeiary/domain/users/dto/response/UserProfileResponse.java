@@ -9,6 +9,8 @@ public record UserProfileResponse(
         String nickname,
         String profileImageUrl,
         boolean onboardingCompleted,
-        Role role
+        Role role,
+        String githubUrl,
+        String contactEmail
 ) {
 }

@@ -47,8 +47,12 @@ Swagger는 인증 없이 조회할 수 있습니다. 인증 API는 로그인 후
 ## OAuth2 로그인과 JWT 쿠키
 
 기존 이메일·비밀번호 로그인 API 대신 Google OAuth2/OIDC 로그인을 사용합니다.
-`/oauth2/authorization/google`에서 시작하며, 현재는 Google 이메일과 일치하는
-기존 활성 `users` 계정만 로그인할 수 있습니다. 신규 가입·닉네임 중복 확인·온보딩 API는 아직 없습니다.
+`/oauth2/authorization/google`에서 시작하며, 처음 로그인한 사용자는 온보딩 대기 권한인 `PENDING`으로 가입합니다.
+Google의 검증된 이메일(`email_verified=true`)을 요구하고, 계정은 제공자(`provider`)와
+Google 사용자 식별자(`sub`)로 식별합니다. 이미 연결된 계정은 이메일이 변경되어도 같은 사용자로 조회합니다.
+OAuth 연결 정보가 없는 기존 계정은 검증된 Gmail 주소 또는 Google Workspace의
+`hd` 클레임이 있는 이메일일 때만 이메일 일치로 연결합니다. 다른 OAuth 계정에 이미 연결된
+이메일은 충돌로 처리하며, 비활성 계정은 로그인할 수 없습니다.
 Google 설정에는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`이 필요하며,
 로그인 성공 후 이동할 주소는 `oauth2.redirect-home`으로 설정합니다.
 
@@ -61,7 +65,7 @@ Google 설정에는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`이 필요하며,
 | POST | `/api/auth/reissue` | `refresh_token` 쿠키, 본문 없음 | 204, 새 인증 쿠키 설정 |
 | POST | `/api/auth/refresh` | `/reissue`와 같은 동작 | 204, 새 인증 쿠키 설정 |
 | POST | `/api/auth/logout` | 인증 쿠키, 본문 없음 | 204, 인증 쿠키 삭제 |
-| GET | `/api/users/me` | USER·ADMIN 권한의 `access_token` 쿠키 | 사용자 프로필 JSON |
+| GET | `/api/users/me` | PENDING·USER·ADMIN 권한의 `access_token` 쿠키 | 사용자 프로필 JSON |
 | GET | `/api/admin/me` | ADMIN 권한의 `access_token` 쿠키 | 사용자 프로필 JSON |
 
 토큰 재발급·로그아웃은 Access Token이 만료되어도 호출할 수 있습니다.
@@ -85,8 +89,12 @@ Refresh Token은 원문 대신 SHA-256 해시를 DB에 저장하고, 재발급 �
 `TokenCleanupService`가 매일 새벽 3시(Asia/Seoul)에 만료된 토큰과 블랙리스트 기록을 삭제합니다.
 실행 시간과 활성화 여부는 `auth.token-cleanup.cron`, `auth.token-cleanup.enabled`로 설정합니다.
 
-`/api/admin/**`에는 ADMIN 권한이 필요합니다. 공개 GET `/api/**`, OAuth2 진입·콜백,
-재발급·로그아웃을 제외한 요청은 인증이 필요합니다. 인증 오류는 401, 권한 부족은 403이며
+`/api/admin/**`에는 ADMIN 권한이 필요합니다. `PENDING` 계정은 본인 조회,
+닉네임 중복 확인, 온보딩 완료, 토큰 재발급·로그아웃 API와 공개 조회를 사용할 수 있습니다.
+프로필 수정 등 나머지 일반 기능은 온보딩을 완료한 `USER` 또는 `ADMIN` 권한이 필요합니다.
+GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요하며,
+공개 GET `/api/**`, OAuth2 진입·콜백, 재발급·로그아웃 외의 요청은 인증이 필요합니다.
+인증 오류는 401, 권한 부족은 403이며
 기존 `{ "message": "...", "code": "..." }` 형식을 사용합니다.
 현재 CSRF 검사는 비활성화되어 있고, 인증 쿠키의 SameSite 기본값은 Strict입니다.
 
@@ -97,22 +105,59 @@ Refresh Token은 원문 대신 SHA-256 해시를 DB에 저장하고, 재발급 �
 `service/TokenService`는 쿠키 처리를 담당합니다. JWT 생성·검증은 `provider`,
 인증 필터는 `cookie`, 토큰 엔티티와 저장소는 `entity`, `repository`에서 관리합니다.
 
-사용자 모델·권한·저장소와 관리자 API는 `domain/users`에서 관리합니다.
-인증 필터는 검증한 `User`를 principal로 저장하고, 관리자 컨트롤러는
-`@AuthenticationPrincipal User user`를 받아 `AdminService`에 위임합니다.
-`UserMapper`가 `UserProfileResponse`로 변환합니다.
-프론트 모델에 맞춰 응답은 `id`, `email`, `name`, `nickname`, `profileImageUrl`,
-`onboardingCompleted`, `role`을 포함합니다. 실명과 닉네임은 별도 필드이며,
-닉네임은 한글·영문·숫자·밑줄 2~20자로 대소문자를 구분하지 않고 중복을 제한합니다.
-프로필 이미지는 선택 사항이고, 온보딩 완료 여부는 닉네임 설정 여부로 계산합니다.
+### 사용자 온보딩과 공개 프로필
+
+사용자 모델·권한·저장소와 사용자·관리자 API는 `domain/users`에서 관리합니다.
+인증 필터는 검증한 `User`를 principal로 저장하며, 본인 정보 조회·수정은
+`@AuthenticationPrincipal User user`의 식별자를 사용합니다.
+`UserMapper`가 본인용 `UserProfileResponse`와 공개용 `PublicUserProfileResponse`를 구분합니다.
+
+| 요청 | 경로 | 인증 / 입력 | 성공 응답 |
+| --- | --- | --- | --- |
+| GET | `/api/users/me` | 인증 쿠키 | 본인 프로필 |
+| GET | `/api/users/nickname-availability?nickname=...` | 인증 쿠키, 확인할 닉네임 | `{ "available": true/false }` |
+| POST | `/api/users/me/onboarding` | 인증 쿠키, multipart 폼 | 저장한 본인 프로필 |
+| POST | `/api/users/me/profile-image` | USER·ADMIN 인증 쿠키, multipart `profileImage` 파일 | `{ "profileImageUrl": "https://..." }` |
+| PUT | `/api/users/me/profile` | USER·ADMIN 인증 쿠키, 프로필 전체를 담은 JSON | 저장한 본인 프로필 |
+| GET | `/api/users/{userId}` | 공개 | 공개 프로필 |
+| GET | `/api/users/by-nickname/{nickname}` | 공개, 닉네임 대소문자 무관 | 공개 프로필 |
+
+| 입력 필드 | 온보딩 | 프로필 수정 | 검증 |
+| --- | --- | --- | --- |
+| `nickname` | 필수 | 필수 | 한글·영문·숫자·밑줄 2~20자, 대소문자 무관 중복 제한 |
+| `profileImageUrl` | — | 선택 | HTTPS URL, 최대 2,048자 |
+| `githubUrl` | — | 선택 | `https://github.com/{사용자명}` 형태, 최대 255자 |
+| `contactEmail` | — | 선택 | 공개할 연락 이메일, 최대 254자 |
+
+닉네임 중복 확인은 현재 사용자 본인의 닉네임을 제외합니다. 온보딩을 완료하면 `PENDING` 계정을
+`USER`로 승격하며, 기존 `ADMIN` 권한은 유지합니다. 응답의 `onboardingCompleted` 필드는 유지하되
+`role != PENDING`으로 계산합니다. 온보딩은 `multipart/form-data`로 닉네임만 받습니다.
+프로필 사진·GitHub·공개 연락 이메일은 가입 후 내 집에서 설정합니다.
+프로필 사진은 선택 사항입니다. `POST /api/users/me/profile-image`에 `multipart/form-data`의
+`profileImage` 파일로 JPEG를 전송합니다. 파일은 최대 1MiB(1,048,576바이트),
+가로·세로 각각 최대 1,024px여야 합니다. 서버는 실제 JPEG 형식과 픽셀 크기를 확인한 뒤
+재인코딩하여 메타데이터를 제거하고 S3에 저장합니다. `PENDING` 계정은 업로드할 수 없습니다.
+
+업로드 응답의 `profileImageUrl`을 기존 `PUT /api/users/me/profile` 요청에 담아야
+사용자 프로필에 적용됩니다. 업로드 API 자체는 사용자 DB를 변경하지 않습니다.
+잘못된 이미지 입력은 400, 용량 초과는 413, 저장소 설정 누락이나 업로드 실패는 503으로 반환합니다.
+
+프로필 수정은 전체 수정입니다. 선택 필드를 생략하거나 `null` 또는 빈 문자열로 보내면
+기존 값을 삭제하므로 유지할 값도 함께 전송합니다. 로그인 이메일·실명·권한은 수정 입력에 포함하지 않습니다.
+
+본인 프로필은 `id`, `email`, `name`, `nickname`, `profileImageUrl`, `onboardingCompleted`,
+`role`, `githubUrl`, `contactEmail`을 반환합니다. 공개 프로필은 `id`, `nickname`,
+`profileImageUrl`, `githubUrl`, `contactEmail`만 반환하며 로그인 이메일·실명·권한·Google 식별자는
+포함하지 않습니다. `contactEmail`은 사용자가 직접 공개한 별도 연락처이며 로그인 이메일을 자동으로 복사하지 않습니다.
+공개 조회는 활성 상태이고 온보딩을 완료한 계정만 제공하며, 그 외에는 404를 반환합니다.
 
 ### 사용자 계정과 JWT 키
 
-사용자 계정은 `users` 테이블에 직접 등록합니다. 소문자 `email`, `name`,
-`enabled`, `created_at`, `updated_at`을 설정하며 `id`는 DB가 자동 생성합니다.
-Google OAuth2 전용이므로 사용자 비밀번호를 보관하지 않습니다.
-관리자 계정의 `role`은 `ADMIN`으로 지정하고, 생략하면 `USER`입니다.
-닉네임·프로필 이미지가 없는 기존 계정은 그대로 유지됩니다.
+일반 사용자는 Google 최초 로그인으로 가입하며, 이메일은 소문자로 저장합니다.
+Google OAuth2 전용이므로 사용자 비밀번호를 보관하지 않습니다. 신규 계정의 기본 권한은
+`PENDING`이며 온보딩 완료 후 `USER`가 됩니다. 관리자 권한은 DB에서 `role`을 `ADMIN`으로 지정합니다.
+기존 `USER` 중 닉네임이 없는 계정은 `PENDING`으로 보정하여 로그인 후 온보딩을 진행합니다.
+기존 `ADMIN` 권한은 닉네임 유무와 관계없이 유지합니다.
 로컬 임시 DB(`bootTestRun`)는 종료 시 정리되므로 계정을 유지하려면 기존 DB에 연결합니다.
 
 운영 애플리케이션의 `TOKEN_JWT_SECRET`은 `openssl rand -base64 32`로 생성한 값을 사용합니다.
@@ -151,7 +196,11 @@ DB 환경 변수나 별도의 PostgreSQL 실행은 필요하지 않습니다.
 예외 처리·OpenAPI·코드 생성·사용자 저장소 테스트와,
 `global/security/token`의 JWT 검증·쿠키 처리·로그아웃·토큰 재발급·블랙리스트 단위 테스트가 있습니다.
 사용자 테스트 객체는 `domain/users/fixture/UserFixture`에서 관리합니다.
-새 인증 테스트는 mock 저장소와 MockMvc를 사용하며 DB 없이 실행할 수 있습니다.
+OAuth 신규 가입·기존 계정 연결, 온보딩·프로필 수정·공개 응답 범위와 입력 검증도 테스트합니다.
+서비스·컨트롤러 단위 테스트는 mock 저장소와 MockMvc를 사용하며 DB 없이 실행할 수 있습니다.
+사용자 저장소 테스트는 실제 PostgreSQL에서 공개 프로필 저장과 닉네임·OAuth 식별자 유니크 제약을 확인합니다.
+프로필 이미지 테스트는 실제 JPEG fixture와 S3 mock으로 형식·용량·픽셀 제한,
+메타데이터 제거와 업로드 실패 처리를 확인하며 AWS에 파일을 전송하지 않습니다.
 
 테스트는 `// given`, `// when`, `// then`으로 준비·실행·검증을 구분합니다.
 Mock 설정은 BDDMockito `given(...).willReturn(...)` / `willThrow(...)`를,
@@ -211,11 +260,15 @@ sudo install -m 644 compose.yaml /opt/codeiary/compose.yaml
 sudo install -m 755 deploy/deploy-api.sh /usr/local/sbin/codeiary-deploy-api
 ```
 
-Flyway의 `V1__create_auth_tables.sql` 하나로 `users`, `refresh_tokens`, `token_blacklist`와
-관련 제약 조건·인덱스를 생성합니다. 닉네임·프로필 이미지와 대소문자를 구분하지 않는
-닉네임 중복 방지 인덱스를 포함하며 사용자 비밀번호 컬럼은 없습니다.
-DB를 초기화하고 적용하는 기준 스키마이므로 기존 DB의 `flyway_schema_history`도 함께 초기화해야 합니다.
-새 계정의 기본 권한은 `USER`이며, 관리자 계정은 `role`을 `ADMIN`으로 지정합니다.
+Flyway의 기존 `V1__create_auth_tables.sql`은 보존합니다. V1은 `users`, `refresh_tokens`,
+`token_blacklist`와 관련 제약 조건·인덱스를 생성하며, 닉네임·프로필 이미지와 대소문자를 구분하지 않는
+닉네임 중복 방지 인덱스를 포함합니다. 사용자 비밀번호 컬럼은 없습니다.
+`V2__add_user_profiles_and_oauth_identity.sql`이 `github_url`, `contact_email`,
+`oauth_provider`, `oauth_subject`와 OAuth 식별자 유니크 인덱스를 추가합니다.
+역할 CHECK 제약에 `PENDING`을 추가하고 기본값을 `PENDING`으로 변경하며,
+기존 `USER` 중 닉네임이 없는 계정도 `PENDING`으로 보정합니다.
+기존 DB는 데이터와 `flyway_schema_history`를 유지한 채 V2를 순차 적용합니다.
+새 계정은 온보딩 완료 시 `USER`로 승격하며, 관리자 계정은 `role`을 `ADMIN`으로 지정합니다.
 
 운영 인스턴스는 Lightsail `small_3_0` 플랜(2GB RAM)입니다. 방화벽은 `22`, `80`, `443`만
 허용하고 `8080`, `5432`는 열지 않습니다.
@@ -224,8 +277,26 @@ DB를 초기화하고 적용하는 기준 스키마이므로 기존 DB의 `flywa
 
 `infra/media-storage.yaml`은 비공개 S3 버킷과 CloudFront 배포를 생성합니다. S3 객체는
 CloudFront OAC를 통해서만 읽을 수 있고, 정적 미디어 배포는 HTTPS와 압축을 사용합니다.
-스택은 `ap-northeast-2`에 배포하며 CloudFront 기본 도메인을 출력합니다. 현재 애플리케이션에는
-이미지 업로드 API가 없으므로, 업로드 기능을 추가할 때 별도의 최소 권한 업로드 인증을 연결해야 합니다.
+스택은 `ap-northeast-2`에 배포하며 CloudFront 기본 도메인을 출력합니다.
+프로필 이미지 API는 서버에서 `profiles/{userId}/{uuid}.jpg` 경로로 업로드하며,
+SSE-S3(`AES256`), `Content-Type: image/jpeg`, 1년 `immutable` 캐시를 적용합니다.
+객체 ACL로 공개 권한을 추가하지 않고, 설정된 HTTPS 배포 주소로 이미지 URL을 반환합니다.
+
+| 환경 변수 | 용도 |
+| --- | --- |
+| `MEDIA_S3_BUCKET` | 업로드할 기존 비공개 S3 버킷 이름 |
+| `MEDIA_PUBLIC_BASE_URL` | 이미지 배포용 HTTPS 기본 주소(예: `https://img.codeiary.com`) |
+| `AWS_REGION` | S3 버킷 리전, 기본값 `ap-northeast-2` |
+
+S3 클라이언트는 AWS SDK 기본 자격증명 공급망을 사용합니다. API 실행 환경에서
+IAM 역할 등으로 자격증명을 제공하고, 해당 주체에는
+`arn:aws:s3:::<bucket>/profiles/*`에 대한 `s3:PutObject` 최소 권한을 부여해야 합니다.
+배포용 GitHub OIDC 역할 설정만으로 실행 중인 API 컨테이너에 자격증명이 전달되지는 않습니다.
+버킷 이름이나 유효한 HTTPS 공개 주소가 없으면 업로드는 503으로 응답합니다.
+
+이번 변경에서는 클라우드 배포, 실행 환경의 AWS 자격증명 설정, 실제 S3 업로드를 수행하지 않았습니다.
+운영 사용 전 위 환경 변수와 업로드 권한을 실행 환경에 연결하고 실제 업로드를 검증해야 합니다.
+
 `img.codeiary.com` 사용자 지정 도메인을 연결하려면 `us-east-1` ACM 인증서를 DNS 검증하고,
 Cloudflare에 ACM 검증 CNAME과 CloudFront 대상 CNAME(`img` → 배포 도메인, DNS only)을 등록한 뒤
 `DomainCertificateArn` 파라미터로 스택을 갱신합니다.

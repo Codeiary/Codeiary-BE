@@ -1,4 +1,8 @@
 spring:
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 2MB
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
   security:
@@ -16,6 +20,12 @@ server:
 
 oauth2:
   redirect-home: ${OAUTH2_REDIRECT_HOME:http://localhost:5173/auth/callback}
+
+media:
+  s3:
+    bucket: ${MEDIA_S3_BUCKET:}
+    public-base-url: ${MEDIA_PUBLIC_BASE_URL:}
+    region: ${AWS_REGION:ap-northeast-2}
 
 token:
   jwt:
