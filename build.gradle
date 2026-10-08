@@ -23,10 +23,6 @@ java {
 	}
 }
 
-configurations {
-    testAnnotationProcessor.extendsFrom annotationProcessor
-}
-
 repositories {
 	mavenCentral()
 }
@@ -72,8 +68,6 @@ dependencies {
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
-    testCompileOnly 'org.projectlombok:lombok'
-    testAnnotationProcessor 'org.projectlombok:lombok'
 
     // MapStruct
     implementation "org.mapstruct:mapstruct:${mapstructVersion}"
@@ -103,10 +97,6 @@ tasks.named('test') {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-}
-
-eclipse {
-    synchronizationTasks 'eclipseJdt', 'eclipseJdtApt', 'eclipseFactorypath'
 }
 
 tasks.named('bootTestRun') {
