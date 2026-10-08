@@ -4,13 +4,13 @@ import com.codeiary.domain.users.entity.User;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.security.token.service.TokenService;
 import com.codeiary.global.security.token.service.TokenSessionService;
-
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,18 +19,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
+@RequiredArgsConstructor
 public final class TokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final TokenService cookies;
     private final TokenSessionService sessions;
-
-    public TokenAuthenticationFilter(
-            TokenService cookies,
-            TokenSessionService sessions
-    ) {
-        this.cookies = cookies;
-        this.sessions = sessions;
-    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {

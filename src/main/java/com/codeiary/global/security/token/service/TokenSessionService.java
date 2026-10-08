@@ -42,7 +42,6 @@ public class TokenSessionService {
         return pair;
     }
 
-    // 재사용된 토큰을 거절하더라도 해당 로그인 차단은 커밋해야 한다.
     @Transactional(noRollbackFor = RestApiException.class)
     public TokenPair reissue(String rawRefreshToken) {
         Claims claims = tokens.validateRefreshToken(rawRefreshToken);
