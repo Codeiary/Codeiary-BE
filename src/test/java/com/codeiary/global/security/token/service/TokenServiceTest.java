@@ -1,6 +1,6 @@
 package com.codeiary.global.security.token.service;
 
-import com.codeiary.global.security.token.cookie.TokenProperties;
+import com.codeiary.global.security.token.fixture.TokenFixture;
 import com.codeiary.global.security.token.dto.TokenPair;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
@@ -8,7 +8,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.http.ResponseCookie;
+import org.springframework.http.HttpHeaders;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -21,41 +21,53 @@ class TokenServiceTest {
 
     @BeforeEach
     void setUp() {
-        TokenProperties properties = new TokenProperties(
-                "access_token", "refresh_token", "codeiary.com", "/",
-                true, true, "Strict", Duration.ofMinutes(30), Duration.ofDays(7));
-        tokenService = new TokenService(properties);
+        tokenService = TokenFixture.cookies("codeiary.com");
     }
 
     @Test
-    @DisplayName("Access Token 쿠키에 설정값을 적용할 수 있다.")
-    void createAccessTokenCookie() {
+    @DisplayName("인증 쿠키에 설정값과 토큰 만료 시간을 적용할 수 있다.")
+    void writeTokenCookies() {
+        // given
+        Instant now = Instant.now();
+        TokenPair pair = new TokenPair("access-value", "refresh-value",
+                now.plus(Duration.ofMinutes(30)), now.plus(Duration.ofDays(7)));
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
         // when
-        ResponseCookie cookie = tokenService.accessToken("access-value");
+        tokenService.writeTokens(response, pair);
+        long after = Instant.now().getEpochSecond();
 
         // then
-        assertThat(cookie.toString())
-                .contains("access_token=access-value")
-                .contains("Path=/")
-                .contains("Domain=codeiary.com")
-                .contains("HttpOnly")
-                .contains("Secure")
-                .contains("SameSite=Strict");
-        assertThat(cookie.getMaxAge()).isEqualTo(Duration.ofMinutes(30));
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).hasSize(2)
+                .allSatisfy(cookie -> assertThat(cookie)
+                        .contains("Path=/", "Domain=codeiary.com", "HttpOnly", "Secure", "SameSite=Strict"));
+        assertThat(response.getCookie("access_token")).isNotNull().satisfies(cookie -> {
+            assertThat(cookie.getValue()).isEqualTo(pair.accessToken());
+            assertThat((long) cookie.getMaxAge()).isBetween(
+                    pair.accessExpiresAt().getEpochSecond() - after, Duration.ofMinutes(30).toSeconds());
+        });
+        assertThat(response.getCookie("refresh_token")).isNotNull().satisfies(cookie -> {
+            assertThat(cookie.getValue()).isEqualTo(pair.refreshToken());
+            assertThat((long) cookie.getMaxAge()).isBetween(
+                    pair.refreshExpiresAt().getEpochSecond() - after, Duration.ofDays(7).toSeconds());
+        });
     }
 
     @Test
     @DisplayName("로그아웃 쿠키에도 설정값을 적용하고 만료시킬 수 있다.")
     void clearCookies() {
+        // given
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
         // when
-        ResponseCookie accessCookie = tokenService.clearAccessToken();
-        ResponseCookie refreshCookie = tokenService.clearRefreshToken();
+        tokenService.clearTokens(response);
 
         // then
-        assertThat(accessCookie.toString()).contains("access_token=").contains("SameSite=Strict");
-        assertThat(refreshCookie.toString()).contains("refresh_token=").contains("SameSite=Strict");
-        assertThat(accessCookie.getMaxAge()).isEqualTo(Duration.ZERO);
-        assertThat(refreshCookie.getMaxAge()).isEqualTo(Duration.ZERO);
+        assertThat(response.getCookies()).extracting(Cookie::getName)
+                .containsExactly("access_token", "refresh_token");
+        assertThat(response.getHeaders(HttpHeaders.SET_COOKIE)).hasSize(2)
+                .allSatisfy(cookie -> assertThat(cookie).contains(
+                        "=;", "Max-Age=0", "Path=/", "Domain=codeiary.com", "HttpOnly", "Secure", "SameSite=Strict"));
     }
 
     @Test
@@ -90,20 +102,19 @@ class TokenServiceTest {
     }
 
     @Test
-    @DisplayName("만료된 토큰의 쿠키를 삭제하고 설정된 최대 수명을 지킬 수 있다.")
-    void respectCookieAgeBounds() {
+    @DisplayName("만료된 토큰의 쿠키를 삭제할 수 있다.")
+    void clearExpiredTokenCookies() {
         // given
+        Instant expiredAt = Instant.now().minusSeconds(10);
         TokenPair pair = new TokenPair("access-value", "refresh-value",
-                Instant.now().minusSeconds(10), Instant.now().plus(Duration.ofDays(8)));
+                expiredAt, expiredAt);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
         // when
         tokenService.writeTokens(response, pair);
 
         // then
-        assertThat(response.getCookie("access_token")).isNotNull()
-                .satisfies(cookie -> assertThat(cookie.getMaxAge()).isZero());
-        assertThat(response.getCookie("refresh_token")).isNotNull()
-                .satisfies(cookie -> assertThat(cookie.getMaxAge()).isEqualTo((int) Duration.ofDays(7).toSeconds()));
+        assertThat(response.getCookies()).hasSize(2).allSatisfy(cookie ->
+                assertThat(cookie.getMaxAge()).isZero());
     }
 }

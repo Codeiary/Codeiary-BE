@@ -256,8 +256,8 @@ class OpenApiIntegrationTest extends IntegrationTestSupport {
     }
 
     private Cookie accessCookie(User user) {
-        return new Cookie("access_token", tokens.generateAccessToken(
-                user.getId(), user.getRole().name(), UUID.randomUUID()));
+        return new Cookie("access_token", tokens.generateTokenPair(
+                user.getId(), user.getRole().name(), UUID.randomUUID()).accessToken());
     }
 
     private Cookie responseCookie(MvcResult result, String name) {

@@ -1,25 +1,24 @@
 package com.codeiary.global.config;
 
-import com.codeiary.global.security.token.cookie.TokenProperties;
-import com.codeiary.global.security.token.provider.TokenJwtProperties;
-
 import java.security.SecureRandom;
 import java.util.Base64;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({TokenJwtProperties.class, TokenProperties.class})
 public class TokenConfiguration {
 
+    @Value("${token.jwt.secret:}")
+    private String configuredSecret;
+
     @Bean
-    SecretKey decodeKey(TokenJwtProperties properties, Environment environment) {
-        String secret = properties.secret();
+    SecretKey decodeKey(Environment environment) {
+        String secret = configuredSecret;
         if (secret == null || secret.isBlank()) {
             if (environment.acceptsProfiles(Profiles.of("prod"))) {
                 throw new IllegalStateException("운영 환경에는 TOKEN_JWT_SECRET을 설정해야 합니다.");

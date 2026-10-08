@@ -1,5 +1,6 @@
 package com.codeiary.global.security.token.provider;
 
+import com.codeiary.global.security.token.fixture.TokenFixture;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.security.token.dto.TokenPair;
 import com.codeiary.global.security.token.exception.TokenErrorCode;
@@ -24,46 +25,14 @@ class JwtTokenProviderTest {
 
     @BeforeEach
     void setUp() {
-        tokenProvider = new JwtTokenProvider(properties(), signingKey);
-    }
-
-    @Test
-    @DisplayName("Access Token을 발급하고 검증할 수 있다.")
-    void issueAndValidateAccessToken() {
-        // given
-        UUID sessionId = UUID.randomUUID();
-
-        // when
-        String token = tokenProvider.generateAccessToken(1L, "ADMIN", sessionId);
-        Claims claims = tokenProvider.validateAccessToken(token);
-
-        // then
-        assertThat(claims.getSubject()).isEqualTo("1");
-        assertThat(claims.get("role", String.class)).isEqualTo("ADMIN");
-        assertThat(claims.get("sid", String.class)).isEqualTo(sessionId.toString());
-        assertThat(claims.get("token_use", String.class)).isEqualTo("access");
-    }
-
-    @Test
-    @DisplayName("Refresh Token을 발급하고 검증할 수 있다.")
-    void issueAndValidateRefreshToken() {
-        // given
-        UUID sessionId = UUID.randomUUID();
-
-        // when
-        String token = tokenProvider.generateRefreshToken(2L, "USER", sessionId);
-        Claims claims = tokenProvider.validateRefreshToken(token);
-
-        // then
-        assertThat(claims.getSubject()).isEqualTo("2");
-        assertThat(claims.get("token_use", String.class)).isEqualTo("refresh");
+        tokenProvider = TokenFixture.provider(signingKey);
     }
 
     @Test
     @DisplayName("Access Token을 사용한 재발급을 거절할 수 있다.")
     void rejectAccessTokenAsRefreshToken() {
         // given
-        String accessToken = tokenProvider.generateAccessToken(1L, "USER", UUID.randomUUID());
+        String accessToken = tokenProvider.generateTokenPair(1L, "USER", UUID.randomUUID()).accessToken();
 
         // when & then
         assertThatThrownBy(() -> tokenProvider.validateRefreshToken(accessToken))
@@ -76,10 +45,8 @@ class JwtTokenProviderTest {
     @DisplayName("만료된 토큰을 거절할 수 있다.")
     void rejectExpiredToken() {
         // given
-        JwtTokenProvider expiredTokenProvider = new JwtTokenProvider(
-                new TokenJwtProperties("unused", "codeiary", "codeiary-api",
-                        Duration.ofSeconds(-1), Duration.ofDays(7)), signingKey);
-        String token = expiredTokenProvider.generateAccessToken(1L, "USER", UUID.randomUUID());
+        JwtTokenProvider expiredTokenProvider = TokenFixture.provider(signingKey, Duration.ofSeconds(-1));
+        String token = expiredTokenProvider.generateTokenPair(1L, "USER", UUID.randomUUID()).accessToken();
 
         // when & then
         assertThatThrownBy(() -> tokenProvider.validateAccessToken(token))
@@ -104,9 +71,8 @@ class JwtTokenProviderTest {
         // given
         byte[] otherKey = new byte[32];
         otherKey[0] = 1;
-        JwtTokenProvider otherProvider = new JwtTokenProvider(properties(),
-                new SecretKeySpec(otherKey, "HmacSHA256"));
-        String token = otherProvider.generateAccessToken(1L, "ADMIN", UUID.randomUUID());
+        JwtTokenProvider otherProvider = TokenFixture.provider(new SecretKeySpec(otherKey, "HmacSHA256"));
+        String token = otherProvider.generateTokenPair(1L, "ADMIN", UUID.randomUUID()).accessToken();
 
         // when & then
         assertThatThrownBy(() -> tokenProvider.validateAccessToken(token))
@@ -119,21 +85,29 @@ class JwtTokenProviderTest {
     @DisplayName("Access Token 30분과 Refresh Token 7일의 만료 시간을 설정할 수 있다.")
     void issueTokenPairWithConfiguredExpiry() {
         // given
+        UUID sessionId = UUID.randomUUID();
         Instant before = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 
         // when
-        TokenPair pair = tokenProvider.generateTokenPair(1L, "USER", UUID.randomUUID());
+        TokenPair pair = tokenProvider.generateTokenPair(1L, "USER", sessionId);
         Instant after = Instant.now().truncatedTo(ChronoUnit.SECONDS);
+        Claims access = tokenProvider.validateAccessToken(pair.accessToken());
+        Claims refresh = tokenProvider.validateRefreshToken(pair.refreshToken());
 
         // then
+        for (Claims claims : new Claims[]{access, refresh}) {
+            assertThat(claims.getSubject()).isEqualTo("1");
+            assertThat(claims.get("role", String.class)).isEqualTo("USER");
+            assertThat(claims.get("sid", String.class)).isEqualTo(sessionId.toString());
+        }
+        assertThat(access.get("token_use", String.class)).isEqualTo("access");
+        assertThat(refresh.get("token_use", String.class)).isEqualTo("refresh");
         assertThat(pair.accessExpiresAt()).isBetween(before.plus(Duration.ofMinutes(30)),
                 after.plus(Duration.ofMinutes(30)));
         assertThat(pair.refreshExpiresAt()).isBetween(before.plus(Duration.ofDays(7)),
                 after.plus(Duration.ofDays(7)));
-        assertThat(tokenProvider.validateAccessToken(pair.accessToken()).getExpiration().toInstant())
-                .isEqualTo(pair.accessExpiresAt());
-        assertThat(tokenProvider.validateRefreshToken(pair.refreshToken()).getExpiration().toInstant())
-                .isEqualTo(pair.refreshExpiresAt());
+        assertThat(access.getExpiration().toInstant()).isEqualTo(pair.accessExpiresAt());
+        assertThat(refresh.getExpiration().toInstant()).isEqualTo(pair.refreshExpiresAt());
     }
 
     @Test
@@ -152,8 +126,4 @@ class JwtTokenProviderTest {
                 .isEqualTo(sessionExpiresAt);
     }
 
-    private TokenJwtProperties properties() {
-        return new TokenJwtProperties("unused", "codeiary", "codeiary-api",
-                Duration.ofMinutes(30), Duration.ofDays(7));
-    }
 }

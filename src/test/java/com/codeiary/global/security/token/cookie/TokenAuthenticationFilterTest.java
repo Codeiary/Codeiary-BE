@@ -1,5 +1,6 @@
 package com.codeiary.global.security.token.cookie;
 
+import com.codeiary.global.security.token.fixture.TokenFixture;
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.domain.users.entity.enums.Role;
 import com.codeiary.domain.users.fixture.UserFixture;
@@ -9,7 +10,6 @@ import com.codeiary.global.security.token.service.TokenService;
 import com.codeiary.global.security.token.service.TokenSessionService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.Cookie;
-import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,10 +48,8 @@ class TokenAuthenticationFilterTest {
     @BeforeEach
     void setUp() {
         SecurityContextHolder.clearContext();
-        TokenProperties properties = new TokenProperties(
-                "access_token", "refresh_token", "", "/",
-                true, true, "Strict", Duration.ofMinutes(30), Duration.ofDays(7));
-        filter = new TokenAuthenticationFilter(new TokenService(properties), sessions);
+        TokenService cookies = TokenFixture.cookies("");
+        filter = new TokenAuthenticationFilter(cookies, sessions);
         request = new MockHttpServletRequest();
         request.setServletPath("/api/users/me");
         response = new MockHttpServletResponse();

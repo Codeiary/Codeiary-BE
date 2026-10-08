@@ -8,71 +8,68 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-import com.codeiary.global.security.token.cookie.TokenProperties;
-
 @Service
 public class TokenService {
 
-    private final TokenProperties properties;
+    @Value("${token.cookie.access-name}")
+    private String accessName;
 
-    public TokenService(TokenProperties properties) {
-        this.properties = properties;
-    }
+    @Value("${token.cookie.refresh-name}")
+    private String refreshName;
 
-    public ResponseCookie accessToken(String token) {
-        return create(properties.accessName(), token, properties.accessMaxAge());
-    }
+    @Value("${token.cookie.domain:}")
+    private String domain;
 
-    public ResponseCookie refreshToken(String token) {
-        return create(properties.refreshName(), token, properties.refreshMaxAge());
-    }
+    @Value("${token.cookie.path}")
+    private String path;
 
-    public ResponseCookie clearAccessToken() {
-        return create(properties.accessName(), "", Duration.ZERO);
-    }
+    @Value("${token.cookie.secure}")
+    private boolean secure;
 
-    public ResponseCookie clearRefreshToken() {
-        return create(properties.refreshName(), "", Duration.ZERO);
-    }
+    @Value("${token.cookie.http-only}")
+    private boolean httpOnly;
+
+    @Value("${token.cookie.same-site}")
+    private String sameSite;
 
     public Optional<String> accessToken(HttpServletRequest request) {
-        return find(request, properties.accessName());
+        return find(request, accessName);
     }
 
     public Optional<String> refreshToken(HttpServletRequest request) {
-        return find(request, properties.refreshName());
+        return find(request, refreshName);
     }
 
     public void writeTokens(HttpServletResponse response, TokenPair pair) {
-        response.addHeader(HttpHeaders.SET_COOKIE, create(properties.accessName(), pair.accessToken(),
-                remainingAge(pair.accessExpiresAt(), properties.accessMaxAge())).toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, create(properties.refreshName(), pair.refreshToken(),
-                remainingAge(pair.refreshExpiresAt(), properties.refreshMaxAge())).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, create(accessName, pair.accessToken(),
+                remainingAge(pair.accessExpiresAt())).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, create(refreshName, pair.refreshToken(),
+                remainingAge(pair.refreshExpiresAt())).toString());
     }
 
     public void clearTokens(HttpServletResponse response) {
-        response.addHeader(HttpHeaders.SET_COOKIE, clearAccessToken().toString());
-        response.addHeader(HttpHeaders.SET_COOKIE, clearRefreshToken().toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, create(accessName, "", Duration.ZERO).toString());
+        response.addHeader(HttpHeaders.SET_COOKIE, create(refreshName, "", Duration.ZERO).toString());
     }
 
-    private Duration remainingAge(Instant expiresAt, Duration configuredMaxAge) {
-        Duration remaining = Duration.ofSeconds(Math.max(0, expiresAt.getEpochSecond() - Instant.now().getEpochSecond()));
-        return remaining.compareTo(configuredMaxAge) < 0 ? remaining : configuredMaxAge;
+    private Duration remainingAge(Instant expiresAt) {
+        return Duration.ofSeconds(Math.max(0, expiresAt.getEpochSecond() - Instant.now().getEpochSecond()));
     }
 
     private ResponseCookie create(String name, String value, Duration maxAge) {
         ResponseCookie.ResponseCookieBuilder cookie = ResponseCookie.from(name, value)
-                .httpOnly(properties.httpOnly())
-                .secure(properties.secure())
-                .path(properties.path())
-                .sameSite(properties.sameSite())
+                .httpOnly(httpOnly)
+                .secure(secure)
+                .path(path)
+                .sameSite(sameSite)
                 .maxAge(maxAge);
-        if (StringUtils.hasText(properties.domain())) cookie.domain(properties.domain());
+        if (StringUtils.hasText(domain)) cookie.domain(domain);
         return cookie.build();
     }
 

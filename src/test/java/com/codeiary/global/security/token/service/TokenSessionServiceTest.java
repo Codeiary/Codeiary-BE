@@ -1,5 +1,6 @@
 package com.codeiary.global.security.token.service;
 
+import com.codeiary.global.security.token.fixture.TokenFixture;
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.domain.users.entity.enums.Role;
 import com.codeiary.domain.users.fixture.UserFixture;
@@ -10,7 +11,6 @@ import com.codeiary.global.security.token.entity.RefreshToken;
 import com.codeiary.global.security.token.entity.TokenBlacklist;
 import com.codeiary.global.security.token.exception.TokenErrorCode;
 import com.codeiary.global.security.token.provider.JwtTokenProvider;
-import com.codeiary.global.security.token.provider.TokenJwtProperties;
 import com.codeiary.global.security.token.repository.RefreshTokenRepository;
 import com.codeiary.global.security.token.repository.TokenBlacklistRepository;
 import java.nio.charset.StandardCharsets;
@@ -61,10 +61,7 @@ class TokenSessionServiceTest {
     @BeforeEach
     void setUp() {
         user = UserFixture.createWithId();
-        tokens = new JwtTokenProvider(
-                new TokenJwtProperties("unused", "codeiary", "codeiary-api",
-                        Duration.ofMinutes(30), Duration.ofDays(7)),
-                new SecretKeySpec(new byte[32], "HmacSHA256"));
+        tokens = TokenFixture.provider(new SecretKeySpec(new byte[32], "HmacSHA256"));
         sessions = new TokenSessionService(users, refreshTokens, blacklist, tokens);
     }
 

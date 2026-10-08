@@ -1,8 +1,8 @@
 package com.codeiary.global.security.token.controller;
 
+import com.codeiary.global.security.token.fixture.TokenFixture;
 import com.codeiary.global.exception.GlobalExceptionHandler;
 import com.codeiary.global.exception.RestApiException;
-import com.codeiary.global.security.token.cookie.TokenProperties;
 import com.codeiary.global.security.token.dto.TokenPair;
 import com.codeiary.global.security.token.exception.TokenErrorCode;
 import com.codeiary.global.security.token.service.TokenService;
@@ -43,10 +43,7 @@ class TokenControllerTest {
 
     @BeforeEach
     void setUp() {
-        TokenProperties properties = new TokenProperties(
-                "access_token", "refresh_token", "codeiary.com", "/",
-                true, true, "Strict", Duration.ofMinutes(30), Duration.ofDays(7));
-        TokenService cookies = new TokenService(properties);
+        TokenService cookies = TokenFixture.cookies("codeiary.com");
         mockMvc = MockMvcBuilders.standaloneSetup(new TokenController(sessions, cookies))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

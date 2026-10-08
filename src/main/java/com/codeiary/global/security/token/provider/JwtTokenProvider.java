@@ -8,54 +8,57 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.JwtParser;
 import io.jsonwebtoken.Jwts;
-import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.UUID;
 import javax.crypto.SecretKey;
+import org.springframework.beans.factory.annotation.Value;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public final class JwtTokenProvider {
 
-    private final TokenJwtProperties properties;
-    private final Clock clock;
-    private final SecretKey signingKey;
-    private final JwtParser parser;
+    @Value("${token.jwt.issuer}")
+    private String issuer;
 
-    public JwtTokenProvider(TokenJwtProperties properties, SecretKey signingKey) {
-        this.properties = properties;
-        this.clock = Clock.systemUTC();
-        this.signingKey = signingKey;
+    @Value("${token.jwt.audience}")
+    private String audience;
+
+    @Value("${token.jwt.access-token-ttl}")
+    private Duration accessTokenTtl;
+
+    @Value("${token.jwt.refresh-token-ttl}")
+    private Duration refreshTokenTtl;
+
+    private final SecretKey signingKey;
+    private JwtParser parser;
+
+    @PostConstruct
+    void initialize() {
         this.parser = Jwts.parser()
                 .verifyWith(signingKey)
-                .requireIssuer(properties.issuer())
-                .requireAudience(properties.audience())
-                .clock(() -> Date.from(clock.instant()))
+                .requireIssuer(issuer)
+                .requireAudience(audience)
                 .sig().clear().add(Jwts.SIG.HS256).and()
                 .build();
     }
 
-    public String generateAccessToken(Long userId, String role, UUID sessionId) {
-        return generate(userId, role, sessionId, "access", clock.instant().plus(properties.accessTokenTtl()));
-    }
-
-    public String generateRefreshToken(Long userId, String role, UUID sessionId) {
-        return generate(userId, role, sessionId, "refresh", clock.instant().plus(properties.refreshTokenTtl()));
-    }
-
     public TokenPair generateTokenPair(Long userId, String role, UUID sessionId) {
         return generateTokenPair(userId, role, sessionId,
-                clock.instant().plus(properties.refreshTokenTtl()).truncatedTo(ChronoUnit.SECONDS));
+                Instant.now().plus(refreshTokenTtl).truncatedTo(ChronoUnit.SECONDS));
     }
 
     public TokenPair generateTokenPair(Long userId, String role, UUID sessionId, Instant refreshExpiresAt) {
-        Instant now = clock.instant();
+        Instant now = Instant.now();
         if (!refreshExpiresAt.isAfter(now)) {
             throw new RestApiException(TokenErrorCode.TOKEN_EXPIRED);
         }
-        Instant accessExpiresAt = now.plus(properties.accessTokenTtl()).truncatedTo(ChronoUnit.SECONDS);
+        Instant accessExpiresAt = now.plus(accessTokenTtl).truncatedTo(ChronoUnit.SECONDS);
         if (accessExpiresAt.isAfter(refreshExpiresAt)) {
             accessExpiresAt = refreshExpiresAt;
         }
@@ -75,11 +78,11 @@ public final class JwtTokenProvider {
 
     private String generate(Long userId, String role, UUID sessionId,
                             String tokenUse, Instant expiresAt) {
-        Instant issuedAt = clock.instant();
+        Instant issuedAt = Instant.now();
         return Jwts.builder()
                 .header().type("JWT").and()
-                .issuer(properties.issuer())
-                .audience().add(properties.audience()).and()
+                .issuer(issuer)
+                .audience().add(audience).and()
                 .subject(String.valueOf(userId))
                 .issuedAt(Date.from(issuedAt))
                 .notBefore(Date.from(issuedAt))
@@ -112,8 +115,6 @@ public final class JwtTokenProvider {
             return claims;
         } catch (ExpiredJwtException exception) {
             throw new RestApiException(TokenErrorCode.TOKEN_EXPIRED, exception);
-        } catch (RestApiException exception) {
-            throw exception;
         } catch (JwtException | IllegalArgumentException exception) {
             throw new RestApiException(TokenErrorCode.TOKEN_INVALID, exception);
         }

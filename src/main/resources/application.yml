@@ -45,8 +45,6 @@ token:
     secure: ${TOKEN_COOKIE_SECURE:false}
     http-only: true
     same-site: ${TOKEN_COOKIE_SAME_SITE:Strict}
-    access-max-age: 30m
-    refresh-max-age: 7d
 
 springdoc:
   api-docs:
