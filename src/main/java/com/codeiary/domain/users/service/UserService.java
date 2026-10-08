@@ -9,7 +9,7 @@ import com.codeiary.domain.users.dto.response.UserProfileResponse;
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.domain.users.exception.UserErrorCode;
 import com.codeiary.domain.users.repository.UserRepository;
-import com.codeiary.domain.images.service.ImageService;
+import com.codeiary.domain.images.validation.ImageUrlValidator;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.security.exception.SecurityErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -25,7 +25,7 @@ public class UserService {
 
     private final UserRepository users;
     private final UserMapper userMapper;
-    private final ImageService images;
+    private final ImageUrlValidator imageUrls;
 
     public UserProfileResponse getProfile(User user) {
         return userMapper.toResponse(user);
@@ -62,7 +62,7 @@ public class UserService {
     public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
         String profileImageUrl = optionalValue(request.profileImageUrl());
         if (profileImageUrl != null) {
-            images.validateImageUrl(profileImageUrl);
+            imageUrls.validate(profileImageUrl);
         }
         User user = loadCurrentUser(userId);
         String nickname = availableNickname(userId, request.nickname());

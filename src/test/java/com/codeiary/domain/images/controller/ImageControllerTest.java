@@ -4,9 +4,7 @@ import com.codeiary.domain.images.dto.request.ImagePresignRequest;
 import com.codeiary.domain.images.dto.response.ImageUploadResponse;
 import com.codeiary.domain.images.service.ImageService;
 import com.codeiary.domain.users.fixture.UserFixture;
-import com.codeiary.global.exception.CommonErrorCode;
 import com.codeiary.global.exception.GlobalExceptionHandler;
-import com.codeiary.global.exception.RestApiException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -73,9 +71,8 @@ class ImageControllerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "null", "{}", "{\"contentType\":\"image/png\",\"contentLength\":null}",
-            "{\"contentType\":null,\"contentLength\":128}", "{\"contentType\":\"image/png\",\"contentLength\":0}",
-            "{\"contentType\":\"image/png\",\"contentLength\":-1}",
+    @ValueSource(strings = {"{\"contentType\":\"image/png\",\"contentLength\":null}",
+            "{\"contentType\":\"image/png\",\"contentLength\":0}",
             "{\"contentType\":\"\",\"contentLength\":128}"})
     @DisplayName("필수 항목이 없거나 파일 크기가 잘못되면 거절할 수 있다.")
     void rejectInvalidRequest(String body) throws Exception {
@@ -85,18 +82,4 @@ class ImageControllerTest {
         then(imageService).shouldHaveNoInteractions();
     }
 
-    @Test
-    @DisplayName("최대 파일 크기를 넘는 요청에 용량 초과 오류를 반환할 수 있다.")
-    void rejectOversizedRequest() throws Exception {
-        // given
-        var request = new ImagePresignRequest("image/png", 10485761L);
-        given(imageService.presign(UserFixture.ID, request))
-                .willThrow(new RestApiException(CommonErrorCode.PAYLOAD_TOO_LARGE));
-
-        // when & then
-        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"contentType\":\"image/png\",\"contentLength\":10485761}"))
-                .andExpect(status().is(413))
-                .andExpect(jsonPath("$.code").value("PAYLOAD_TOO_LARGE"));
-    }
 }

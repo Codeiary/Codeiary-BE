@@ -9,7 +9,7 @@ import com.codeiary.domain.users.entity.enums.Role;
 import com.codeiary.domain.users.exception.UserErrorCode;
 import com.codeiary.domain.users.fixture.UserFixture;
 import com.codeiary.domain.users.repository.UserRepository;
-import com.codeiary.domain.images.service.ImageService;
+import com.codeiary.domain.images.validation.ImageUrlValidator;
 import com.codeiary.global.exception.CommonErrorCode;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.security.exception.SecurityErrorCode;
@@ -43,13 +43,13 @@ class UserServiceTest {
     private UserRepository users;
 
     @Mock
-    private ImageService images;
+    private ImageUrlValidator imageUrls;
 
     private UserService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserService(users, Mappers.getMapper(UserMapper.class), images);
+        service = new UserService(users, Mappers.getMapper(UserMapper.class), imageUrls);
     }
 
     @Test
@@ -89,7 +89,7 @@ class UserServiceTest {
         // then
         assertThat(response.nickname()).isEqualTo(request.nickname());
         assertThat(response.profileImageUrl()).isEqualTo(request.profileImageUrl());
-        then(images).should().validateImageUrl(request.profileImageUrl());
+        then(imageUrls).should().validate(request.profileImageUrl());
         assertThat(response.githubUrl()).isEqualTo(request.githubUrl());
         assertThat(response.contactEmail()).isEqualTo(request.contactEmail());
         assertThat(response.email()).isEqualTo(UserFixture.EMAIL);
@@ -102,7 +102,7 @@ class UserServiceTest {
         // given
         var request = new UpdateProfileRequest("기록자", "http://localhost:9090/codeiary-local/photo.jpg", null, null);
         willThrow(new RestApiException(CommonErrorCode.INVALID_PARAMETER))
-                .given(images).validateImageUrl(request.profileImageUrl());
+                .given(imageUrls).validate(request.profileImageUrl());
 
         // when / then
         assertThatThrownBy(() -> service.updateProfile(UserFixture.ID, request))
