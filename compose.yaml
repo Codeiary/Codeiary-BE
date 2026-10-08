@@ -32,6 +32,9 @@ services:
       DB_USERNAME: ${POSTGRES_USER:-codeiary}
       DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       JWT_SECRET: ${JWT_SECRET:?Set a Base64-encoded JWT_SECRET of at least 32 bytes}
+      MEDIA_S3_BUCKET: ${MEDIA_S3_BUCKET:-}
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-}
+      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
     networks:
       - backend
 
