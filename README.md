@@ -127,7 +127,7 @@ GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요
 | 입력 필드 | 온보딩 | 프로필 수정 | 검증 |
 | --- | --- | --- | --- |
 | `nickname` | 필수 | 필수 | 한글·영문·숫자·밑줄 2~20자, 대소문자 무관 중복 제한 |
-| `profileImageUrl` | — | 선택 | HTTPS URL, 최대 2,048자 |
+| `profileImageUrl` | — | 선택 | HTTPS URL, 최대 2,048자 (로컬 실행은 로컬 S3 주소도 허용) |
 | `githubUrl` | — | 선택 | `https://github.com/{사용자명}` 형태, 최대 255자 |
 | `contactEmail` | — | 선택 | 공개할 연락 이메일, 최대 254자 |
 
@@ -278,6 +278,36 @@ Flyway의 기존 `V1__create_auth_tables.sql`은 보존합니다. V1은 `users`,
 
 ## 이미지 업로드 API
 
+### 로컬 이미지 저장소
+
+Docker가 실행된 상태에서 백엔드 폴더에서 다음 명령을 실행합니다.
+
+```bash
+docker compose -f compose.local.yaml up -d
+```
+
+`local` 프로필은 `http://localhost:9090`의 S3Mock과 `codeiary-local` 버킷을 사용합니다.
+STS에서 백엔드를 재시작하면 Presigned URL 발급, 브라우저 PUT 업로드, 프로필 저장을
+로컬에서 사용할 수 있습니다. 실제 AWS 자격 증명이나 CloudFront는 필요하지 않으며,
+AWS 사용 요금이 발생하지 않습니다. 이미지는 Docker의 `images` 볼륨에 유지됩니다.
+`docker compose -f compose.local.yaml down`으로 중지하고, 데이터를 유지하려면 `-v`를 붙이지 않습니다.
+
+S3 설정은 `cloud.aws.s3` 아래에 둡니다.
+`S3PresignerConfig`에서 `@Value`로 리전, 자격 증명, 로컬 endpoint를 주입받아
+`S3Presigner`를 등록합니다. 버킷과 공개 주소는 `ImageService`에서 직접 주입받습니다.
+JWT와 쿠키 설정도 사용하는 클래스에서 `@Value`로 주입받습니다.
+쿠키 수명은 발급된 JWT의 남은 유효시간을 따르며, 만료 시간은 `token.jwt`에서만 설정합니다.
+`local` 프로필은 Docker 주소와 로컬 전용 자격 증명을 사용합니다.
+운영에서는 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` 환경 변수와
+기존 버킷·CloudFront 주소를 사용하며, 별도 endpoint를 설정하지 않습니다.
+
+프론트 개발 서버에서만 `http://localhost:9090/codeiary-local/` 주소를 허용합니다.
+운영 빌드와 기본 백엔드 설정은 HTTPS를 요구합니다. 로컬 저장소 포트는 이 컴퓨터에만 노출됩니다.
+[S3Mock](https://github.com/adobe/S3Mock)은 업로드 흐름을 개발하기 위한 에뮬레이터이며,
+Presigned URL의 서명·만료와 AWS IAM 권한을 검증하는 환경은 아닙니다.
+
+### 업로드 계약
+
 `POST /api/images/presigned-url`은 S3에 직접 업로드할 URL을 발급합니다.
 로그인 쿠키가 있는 `USER`·`ADMIN`만 사용할 수 있으며, 비로그인은 401,
 온보딩 전 `PENDING` 계정은 403으로 응답합니다.
@@ -363,7 +393,7 @@ SSE-S3(`AES256`), 이미지 형식에 맞는 `Content-Type`, 1년 `immutable` �
 | `AWS_REGION` | S3 버킷 리전, 기본값 `ap-northeast-2` |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | SSM에서 전달받는 미디어 업로드 전용 IAM 자격증명 |
 
-S3 Presigner는 AWS SDK 기본 자격증명 공급망을 사용합니다. Lightsail의 API 컨테이너에는
+S3 Presigner는 `S3PresignerConfig`가 주입받은 키로 `StaticCredentialsProvider`를 구성합니다. Lightsail의 API 컨테이너에는
 전용 IAM 사용자 `codeiary-media-uploader`의 자격증명을 환경 변수로 전달합니다.
 이 사용자는 `arn:aws:s3:::<bucket>/images/*`에 대한 `s3:PutObject` 권한만 가지며,
 호스트의 SSM 관리 자격증명을 API와 공유하지 않습니다.
