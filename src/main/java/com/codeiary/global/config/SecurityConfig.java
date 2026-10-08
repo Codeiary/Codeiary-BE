@@ -51,9 +51,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/auth/reissue", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers("/api/admin", "/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/users/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/users/me", "/api/users/nickname-availability").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/users/me/onboarding").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
-                        .anyRequest().authenticated())
+                        .anyRequest().hasAnyRole("USER", "ADMIN"))
                 .addFilterBefore(tokenFilter,
                         UsernamePasswordAuthenticationFilter.class)
                 .build();
