@@ -1,16 +1,30 @@
 package com.codeiary.domain.users.controller;
 
+import com.codeiary.domain.users.dto.request.OnboardingRequest;
+import com.codeiary.domain.users.dto.request.UpdateProfileRequest;
+import com.codeiary.domain.users.dto.response.NicknameAvailabilityResponse;
+import com.codeiary.domain.users.dto.response.ProfileImageResponse;
 import com.codeiary.domain.users.dto.response.UserProfileResponse;
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.domain.users.service.UserService;
+import com.codeiary.domain.users.service.ProfileImageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/users")
@@ -20,10 +34,47 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final ProfileImageService profileImageService;
 
     @GetMapping("/me")
     @Operation(summary = "로그인한 사용자 조회")
     public UserProfileResponse me(@AuthenticationPrincipal User user) {
         return userService.getProfile(user);
+    }
+
+    @GetMapping("/nickname-availability")
+    @Operation(summary = "닉네임 사용 가능 여부 확인", description = "현재 사용자의 닉네임은 중복에서 제외합니다.")
+    public NicknameAvailabilityResponse nicknameAvailability(
+            @AuthenticationPrincipal User user,
+            @RequestParam String nickname
+    ) {
+        return userService.checkNickname(user.getId(), nickname);
+    }
+
+    @PostMapping(value = "/me/onboarding", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "온보딩 완료", description = "닉네임을 저장하고 가입 대기 계정을 일반 사용자로 전환합니다.")
+    public UserProfileResponse completeOnboarding(
+            @AuthenticationPrincipal User user,
+            @Valid @ModelAttribute OnboardingRequest request
+    ) {
+        return userService.completeOnboarding(user.getId(), request);
+    }
+
+    @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "프로필 사진 업로드", description = "1MB 이하 JPEG 사진을 저장하고 URL을 반환합니다. 반환된 URL을 프로필 수정 요청에 담아 적용합니다.")
+    public ProfileImageResponse uploadProfileImage(
+            @AuthenticationPrincipal User user,
+            @RequestPart MultipartFile profileImage
+    ) {
+        return profileImageService.upload(user.getId(), profileImage);
+    }
+
+    @PutMapping("/me/profile")
+    @Operation(summary = "내 프로필 수정", description = "닉네임과 프로필 이미지, GitHub, 공개 연락 이메일을 저장합니다. 비워 둔 선택 항목은 삭제합니다.")
+    public UserProfileResponse updateProfile(
+            @AuthenticationPrincipal User user,
+            @Valid @RequestBody UpdateProfileRequest request
+    ) {
+        return userService.updateProfile(user.getId(), request);
     }
 }
