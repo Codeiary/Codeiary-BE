@@ -20,18 +20,16 @@ QueryDSL은 `JPAQueryFactory`를 주입받아 사용합니다. `@Entity`를 작�
 `build/generated/sources/annotationProcessor/java/main`에 자동으로 생성됩니다.
 생성된 코드는 Git에 포함하지 않습니다.
 
-STS/Eclipse에서는 Gradle이 MapStruct·QueryDSL 코드를 생성하고 IDE가 해당 소스를 읽습니다.
-Gradle 동기화와 IDE 자동 빌드에 Java·테스트 컴파일을 연결했습니다.
-최초 설정 또는 생성된 Mapper를 찾지 못할 때 다음 명령을 실행한 뒤,
-프로젝트에서 `Gradle > Refresh Gradle Project`, `Project > Clean`을 실행합니다.
+STS에서는 프로젝트의 `Gradle > Refresh Gradle Project`로 동기화합니다.
+라이브러리는 `Project and External Dependencies`로 묶어 관리하고,
+[어노테이션 처리 플러그인](https://plugins.gradle.org/plugin/com.diffplug.eclipse.apt)이
+MapStruct·QueryDSL의 처리 경로를 설정합니다. STS 자동 빌드가 생성 코드를 갱신합니다.
+별도로 `eclipseClasspath`를 실행하거나 JAR를 직접 추가하지 않습니다.
 
-```sh
-./gradlew eclipseClasspath eclipseJdt eclipsePreferences
-```
-
-생성 소스는 `build/generated/sources/annotationProcessor/java/main`과
-`build/generated/sources/annotationProcessor/java/test`에서 관리합니다. 해당 폴더의 선택적 경고는 제외하고,
-직접 작성한 소스의 경고는 유지합니다. Java 소스 경로는 `src/main/java`, `src/test/java`입니다.
+Gradle 생성 코드는 `build/generated/sources/annotationProcessor/java/`,
+STS 생성 코드는 `.apt_generated`와 `.apt_generated_tests`에 보관하며 Git에서 제외합니다.
+같은 폴더를 VS Code에서도 열 때는 `.vscode/settings.json`의
+`java.autobuild.enabled`를 `false`로 설정해 두 IDE가 `bin/`을 동시에 덮어쓰지 않게 합니다.
 
 ## API 문서
 
@@ -54,7 +52,11 @@ OAuth 연결 정보가 없는 기존 계정은 검증된 Gmail 주소 또는 Goo
 `hd` 클레임이 있는 이메일일 때만 이메일 일치로 연결합니다. 다른 OAuth 계정에 이미 연결된
 이메일은 충돌로 처리하며, 비활성 계정은 로그인할 수 없습니다.
 Google 설정에는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`이 필요하며,
-로그인 성공 후 이동할 주소는 `oauth2.redirect-home`으로 설정합니다.
+로그인 성공 후 이동할 주소는 `OAUTH2_REDIRECT_HOME`으로 설정합니다.
+로컬 실행은 `.env.example`을 참고해 IDE 실행 환경에 세 값을 등록하고,
+운영 배포는 SSM Parameter Store의 `/codeiary/prod/google-client-id`와
+`/codeiary/prod/google-client-secret`을 사용합니다. 운영 리디렉션 주소는
+`https://codeiary.com/auth/callback`입니다.
 
 로그인 성공 시 JJWT로 Access Token과 Refresh Token을 발급하고 `HttpOnly` 쿠키로 전달합니다.
 운영에서는 `Secure`, `SameSite=Strict`를 사용합니다. 쿠키 이름·경로·도메인 등은
@@ -117,7 +119,7 @@ GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요
 | GET | `/api/users/me` | 인증 쿠키 | 본인 프로필 |
 | GET | `/api/users/nickname-availability?nickname=...` | 인증 쿠키, 확인할 닉네임 | `{ "available": true/false }` |
 | POST | `/api/users/me/onboarding` | 인증 쿠키, multipart 폼 | 저장한 본인 프로필 |
-| POST | `/api/users/me/profile-image` | USER·ADMIN 인증 쿠키, multipart `profileImage` 파일 | `{ "profileImageUrl": "https://..." }` |
+| POST | `/api/images/presigned-url` | USER·ADMIN 인증 쿠키, `contentType`·`contentLength` JSON | S3 업로드 URL·공개 이미지 URL·필수 헤더·만료 시각 |
 | PUT | `/api/users/me/profile` | USER·ADMIN 인증 쿠키, 프로필 전체를 담은 JSON | 저장한 본인 프로필 |
 | GET | `/api/users/{userId}` | 공개 | 공개 프로필 |
 | GET | `/api/users/by-nickname/{nickname}` | 공개, 닉네임 대소문자 무관 | 공개 프로필 |
@@ -133,14 +135,13 @@ GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요
 `USER`로 승격하며, 기존 `ADMIN` 권한은 유지합니다. 응답의 `onboardingCompleted` 필드는 유지하되
 `role != PENDING`으로 계산합니다. 온보딩은 `multipart/form-data`로 닉네임만 받습니다.
 프로필 사진·GitHub·공개 연락 이메일은 가입 후 내 집에서 설정합니다.
-프로필 사진은 선택 사항입니다. `POST /api/users/me/profile-image`에 `multipart/form-data`의
-`profileImage` 파일로 JPEG를 전송합니다. 파일은 최대 1MiB(1,048,576바이트),
-가로·세로 각각 최대 1,024px여야 합니다. 서버는 실제 JPEG 형식과 픽셀 크기를 확인한 뒤
-재인코딩하여 메타데이터를 제거하고 S3에 저장합니다. `PENDING` 계정은 업로드할 수 없습니다.
+프로필 사진은 선택 사항입니다. 프론트는 선택한 사진을 256px JPEG로 변환한 뒤
+`POST /api/images/presigned-url`로 업로드 URL을 발급받고, 파일을 S3로 직접 전송합니다.
+`PENDING` 계정은 업로드 URL을 발급받을 수 없습니다.
 
-업로드 응답의 `profileImageUrl`을 기존 `PUT /api/users/me/profile` 요청에 담아야
-사용자 프로필에 적용됩니다. 업로드 API 자체는 사용자 DB를 변경하지 않습니다.
-잘못된 이미지 입력은 400, 용량 초과는 413, 저장소 설정 누락이나 업로드 실패는 503으로 반환합니다.
+S3 업로드 성공 후 응답의 `imageUrl`을 `PUT /api/users/me/profile`의 `profileImageUrl`로
+저장해야 사용자 프로필에 적용됩니다. URL 발급과 S3 업로드는 사용자 DB를 변경하지 않습니다.
+기존 multipart `POST /api/users/me/profile-image`는 제거했으므로 프론트와 백엔드를 함께 배포해야 합니다.
 
 프로필 수정은 전체 수정입니다. 선택 필드를 생략하거나 `null` 또는 빈 문자열로 보내면
 기존 값을 삭제하므로 유지할 값도 함께 전송합니다. 로그인 이메일·실명·권한은 수정 입력에 포함하지 않습니다.
@@ -176,6 +177,8 @@ DB 환경 변수 없이 Swagger를 확인할 수 있으며, 종료하면 임시 
 ```
 
 기존 DB에 연결할 때는 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` 환경 변수를 설정합니다.
+Google 로그인을 사용할 때는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+`OAUTH2_REDIRECT_HOME`도 IDE 실행 구성에 등록합니다.
 Gradle은 `.env` 파일을 자동으로 읽지 않으므로 IDE 실행 환경이나 셸에 변수를 적용해야 합니다.
 
 `.env.example`을 참고해 환경 변수를 설정하고 PostgreSQL을 실행한 다음:
@@ -199,8 +202,8 @@ DB 환경 변수나 별도의 PostgreSQL 실행은 필요하지 않습니다.
 OAuth 신규 가입·기존 계정 연결, 온보딩·프로필 수정·공개 응답 범위와 입력 검증도 테스트합니다.
 서비스·컨트롤러 단위 테스트는 mock 저장소와 MockMvc를 사용하며 DB 없이 실행할 수 있습니다.
 사용자 저장소 테스트는 실제 PostgreSQL에서 공개 프로필 저장과 닉네임·OAuth 식별자 유니크 제약을 확인합니다.
-프로필 이미지 테스트는 실제 JPEG fixture와 S3 mock으로 형식·용량·픽셀 제한,
-메타데이터 제거와 업로드 실패 처리를 확인하며 AWS에 파일을 전송하지 않습니다.
+이미지 테스트는 요청 MIME·길이 검증, Presigned URL의 만료·경로·서명 헤더,
+저장소 설정 오류와 업로드 URL 발급 권한을 확인하며 AWS에 파일을 전송하지 않습니다.
 
 테스트는 `// given`, `// when`, `// then`으로 준비·실행·검증을 구분합니다.
 Mock 설정은 BDDMockito `given(...).willReturn(...)` / `willThrow(...)`를,
@@ -273,13 +276,84 @@ Flyway의 기존 `V1__create_auth_tables.sql`은 보존합니다. V1은 `users`,
 운영 인스턴스는 Lightsail `small_3_0` 플랜(2GB RAM)입니다. 방화벽은 `22`, `80`, `443`만
 허용하고 `8080`, `5432`는 열지 않습니다.
 
+## 이미지 업로드 API
+
+`POST /api/images/presigned-url`은 S3에 직접 업로드할 URL을 발급합니다.
+로그인 쿠키가 있는 `USER`·`ADMIN`만 사용할 수 있으며, 비로그인은 401,
+온보딩 전 `PENDING` 계정은 403으로 응답합니다.
+
+요청은 `application/json`이며, `contentLength`는 전송할 파일의 정확한 바이트 수입니다.
+
+```json
+{
+  "contentType": "image/jpeg",
+  "contentLength": 12345
+}
+```
+
+`contentType`은 `image/jpeg` 또는 `image/png`, `contentLength`는 1바이트 이상
+10MiB(10,485,760바이트) 이하를 허용합니다. 성공 응답은 `200 OK`이며,
+응답 캐시는 `Cache-Control: no-store`로 차단합니다.
+
+```json
+{
+  "uploadUrl": "https://<bucket>.s3.<region>.amazonaws.com/images/1/<uuid>.jpg?<signature>",
+  "imageUrl": "https://img.codeiary.com/images/1/<uuid>.jpg",
+  "headers": {
+    "Content-Type": "image/jpeg",
+    "Cache-Control": "public, max-age=31536000, immutable",
+    "x-amz-server-side-encryption": "AES256",
+    "If-None-Match": "*"
+  },
+  "expiresAt": "2026-10-08T01:05:00Z"
+}
+```
+
+브라우저는 발급 요청에만 인증 쿠키를 보내고, 반환된 `uploadUrl`에는 `File` 또는 `Blob`을
+본문으로 직접 PUT합니다. `FormData`로 감싸지 않고 `headers`를 그대로 적용합니다.
+
+```js
+const issued = await fetch('/api/images/presigned-url', {
+  method: 'POST',
+  credentials: 'include',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ contentType: file.type, contentLength: file.size }),
+})
+if (!issued.ok) throw new Error('이미지 업로드 URL 발급 실패')
+const { uploadUrl, imageUrl, headers } = await issued.json()
+const uploaded = await fetch(uploadUrl, {
+  method: 'PUT',
+  credentials: 'omit',
+  headers,
+  body: file,
+})
+if (!uploaded.ok) throw new Error('이미지 업로드 실패')
+// 업로드 성공 후 imageUrl을 프로필·게시글 저장 요청에 사용합니다.
+```
+
+- URL 유효기간은 5분입니다. 발급에 사용한 임시 AWS 자격증명이 먼저 만료되면 URL도 만료됩니다.
+- `Content-Length`도 서명에 포함하지만 브라우저가 `File`/`Blob` 크기로 자동 설정하므로 직접 헤더를 지정하지 않습니다.
+- 인증된 사용자 ID와 UUID로 `images/{userId}/{uuid}.jpg|png` 경로를 만듭니다.
+  `If-None-Match: *`를 서명하여 같은 URL로 기존 객체를 덮어쓰지 못하게 합니다.
+- `imageUrl`은 기존 공개 CloudFront 이미지 주소입니다. CloudFront Signed URL은 발급하지 않습니다.
+- 이미지 바이트는 백엔드를 거치지 않습니다. 백엔드는 선언한 MIME·길이를 검증하여 서명하고,
+  S3가 PUT 요청의 서명을 확인합니다. 실제 이미지 내용·메타데이터·픽셀 크기는 서버에서 검사하거나 재인코딩하지 않습니다.
+  프론트의 프로필 256px JPEG 변환은 유지하지만 서버 검증을 대체하지 않습니다.
+- DB 저장이나 업로드 완료 확정 API는 추가하지 않습니다. S3 PUT 성공을 확인한 후 반환된 URL을 저장해야 합니다.
+- URL 발급 실패는 기존 `{ "message": "...", "code": "..." }` 형식을 사용합니다.
+  S3 직접 PUT의 오류는 S3 응답이므로 프론트에서 별도로 처리합니다.
+
+기존 multipart `POST /api/images`와 `POST /api/users/me/profile-image`는 제거했습니다.
+프론트와 백엔드를 함께 배포해야 하며, 이미지 업로드 때문에 API 프록시의 본문 크기 제한을 늘릴 필요는 없습니다.
+단위 테스트와 기존 Testcontainers 기반 보안·OpenAPI 테스트에서 발급 계약과 접근 권한을 검증합니다.
+
 ## 미디어 저장소
 
 `infra/media-storage.yaml`은 비공개 S3 버킷과 CloudFront 배포를 생성합니다. S3 객체는
 CloudFront OAC를 통해서만 읽을 수 있고, 정적 미디어 배포는 HTTPS와 압축을 사용합니다.
 스택은 `ap-northeast-2`에 배포하며 CloudFront 기본 도메인을 출력합니다.
-프로필 이미지 API는 서버에서 `profiles/{userId}/{uuid}.jpg` 경로로 업로드하며,
-SSE-S3(`AES256`), `Content-Type: image/jpeg`, 1년 `immutable` 캐시를 적용합니다.
+프로필·게시글 이미지는 브라우저가 `images/{userId}/{uuid}.jpg|png` 경로에 직접 PUT합니다.
+SSE-S3(`AES256`), 이미지 형식에 맞는 `Content-Type`, 1년 `immutable` 캐시를 서명에 포함합니다.
 객체 ACL로 공개 권한을 추가하지 않고, 설정된 HTTPS 배포 주소로 이미지 URL을 반환합니다.
 
 | 환경 변수 | 용도 |
@@ -287,15 +361,49 @@ SSE-S3(`AES256`), `Content-Type: image/jpeg`, 1년 `immutable` 캐시를 적용�
 | `MEDIA_S3_BUCKET` | 업로드할 기존 비공개 S3 버킷 이름 |
 | `MEDIA_PUBLIC_BASE_URL` | 이미지 배포용 HTTPS 기본 주소(예: `https://img.codeiary.com`) |
 | `AWS_REGION` | S3 버킷 리전, 기본값 `ap-northeast-2` |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | SSM에서 전달받는 미디어 업로드 전용 IAM 자격증명 |
 
-S3 클라이언트는 AWS SDK 기본 자격증명 공급망을 사용합니다. API 실행 환경에서
-IAM 역할 등으로 자격증명을 제공하고, 해당 주체에는
-`arn:aws:s3:::<bucket>/profiles/*`에 대한 `s3:PutObject` 최소 권한을 부여해야 합니다.
+S3 Presigner는 AWS SDK 기본 자격증명 공급망을 사용합니다. Lightsail의 API 컨테이너에는
+전용 IAM 사용자 `codeiary-media-uploader`의 자격증명을 환경 변수로 전달합니다.
+이 사용자는 `arn:aws:s3:::<bucket>/images/*`에 대한 `s3:PutObject` 권한만 가지며,
+호스트의 SSM 관리 자격증명을 API와 공유하지 않습니다.
+권한 문서는 `deploy/media-upload-policy.json`에 있으며 HTTPS와 SSE-S3 암호화를 조건으로 제한합니다.
+발급 주체에 `s3:GetObject`나 `s3:DeleteObject` 권한은 필요하지 않습니다.
+기존 CloudFront OAC의 읽기 전용 권한과 S3 Block Public Access 설정은 유지합니다.
 배포용 GitHub OIDC 역할 설정만으로 실행 중인 API 컨테이너에 자격증명이 전달되지는 않습니다.
-버킷 이름이나 유효한 HTTPS 공개 주소가 없으면 업로드는 503으로 응답합니다.
+버킷 이름이나 유효한 HTTPS 공개 주소가 없으면 URL 발급은 503으로 응답합니다.
 
-이번 변경에서는 클라우드 배포, 실행 환경의 AWS 자격증명 설정, 실제 S3 업로드를 수행하지 않았습니다.
-운영 사용 전 위 환경 변수와 업로드 권한을 실행 환경에 연결하고 실제 업로드를 검증해야 합니다.
+서울 리전 Parameter Store에 다음 값을 저장합니다.
+
+| 파라미터 | 형식 |
+| --- | --- |
+| `/codeiary/prod/media-s3-bucket` | `String` |
+| `/codeiary/prod/media-public-base-url` | `String` |
+| `/codeiary/prod/media-access-key-id` | `SecureString` |
+| `/codeiary/prod/media-secret-access-key` | `SecureString` |
+
+`deploy/deploy-api.sh`는 기존 DB·JWT 값과 함께 이 값을 읽고 서울 리전을 지정합니다.
+자격증명은 권한 `600`인 `/run`의 임시 Compose env 파일로만 전달하며 배포 종료 시 삭제합니다.
+운영 `.env`나 이미지에 키를 저장하지 않습니다. 키 교체 시 SSM 값을 갱신하고 API를 다시 배포합니다.
+
+S3 CORS는 기존 GET·HEAD 규칙을 유지하고 직접 PUT용 규칙을 별도로 사용합니다.
+PUT 허용 출처는 `https://codeiary.com`, `https://www.codeiary.com`,
+`http://localhost:5173`, `http://127.0.0.1:5173`으로 제한합니다.
+운영 버킷에도 반환된 필수 헤더를 preflight에서 허용하는 CORS 설정을 적용합니다.
+CORS는 버킷 접근 권한을 부여하지 않으며, Presigned URL의 서명과 IAM 권한은 계속 적용됩니다.
+`uploadUrl`은 임시 업로드 권한을 담으므로 URL 전체와 서명 쿼리·임시 자격증명을 로그에 남기거나 공유하지 않습니다.
+진단에는 요청 ID와 객체 경로 등 비밀이 없는 값만 사용합니다.
+
+서버의 배포 스크립트·Compose와 SSM 값을 먼저 갱신한 뒤 API를 배포합니다.
+배포 후에는 브라우저에서 URL 발급·S3 PUT·CloudFront 조회·프로필 저장을 확인합니다.
+동일한 URL로 재업로드하면 412, 미등록 출처의 preflight와 서명 없는 S3 조회는 403이어야 합니다.
+추가 서비스는 생성하지 않으며 기존 S3 저장·PUT 요청과 CloudFront 전송 사용량에 따라 비용이 발생합니다.
+운영 추적에는 S3 접근 로그, CloudTrail 데이터 이벤트와 CloudWatch 지표를 권장하며,
+로그 저장소도 암호화합니다. 활성화 시 해당 로그·이벤트 비용을 함께 확인합니다.
+
+관련 AWS 문서: [Presigned URL](https://docs.aws.amazon.com/AmazonS3/latest/userguide/using-presigned-url.html),
+[S3 CORS](https://docs.aws.amazon.com/AmazonS3/latest/userguide/cors.html),
+[조건부 쓰기](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html).
 
 `img.codeiary.com` 사용자 지정 도메인을 연결하려면 `us-east-1` ACM 인증서를 DNS 검증하고,
 Cloudflare에 ACM 검증 CNAME과 CloudFront 대상 CNAME(`img` → 배포 도메인, DNS only)을 등록한 뒤
