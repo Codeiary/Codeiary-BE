@@ -3,11 +3,9 @@ package com.codeiary.domain.users.controller;
 import com.codeiary.domain.users.dto.request.OnboardingRequest;
 import com.codeiary.domain.users.dto.request.UpdateProfileRequest;
 import com.codeiary.domain.users.dto.response.NicknameAvailabilityResponse;
-import com.codeiary.domain.users.dto.response.ProfileImageResponse;
 import com.codeiary.domain.users.dto.response.UserProfileResponse;
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.domain.users.service.UserService;
-import com.codeiary.domain.users.service.ProfileImageService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,9 +20,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/users")
@@ -34,7 +30,6 @@ import org.springframework.web.multipart.MultipartFile;
 public class UserController {
 
     private final UserService userService;
-    private final ProfileImageService profileImageService;
 
     @GetMapping("/me")
     @Operation(summary = "로그인한 사용자 조회")
@@ -58,15 +53,6 @@ public class UserController {
             @Valid @ModelAttribute OnboardingRequest request
     ) {
         return userService.completeOnboarding(user.getId(), request);
-    }
-
-    @PostMapping(value = "/me/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "프로필 사진 업로드", description = "1MB 이하 JPEG 사진을 저장하고 URL을 반환합니다. 반환된 URL을 프로필 수정 요청에 담아 적용합니다.")
-    public ProfileImageResponse uploadProfileImage(
-            @AuthenticationPrincipal User user,
-            @RequestPart MultipartFile profileImage
-    ) {
-        return profileImageService.upload(user.getId(), profileImage);
     }
 
     @PutMapping("/me/profile")

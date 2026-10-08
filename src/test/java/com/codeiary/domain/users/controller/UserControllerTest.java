@@ -3,11 +3,8 @@ package com.codeiary.domain.users.controller;
 import com.codeiary.domain.users.dto.request.OnboardingRequest;
 import com.codeiary.domain.users.dto.request.UpdateProfileRequest;
 import com.codeiary.domain.users.dto.response.NicknameAvailabilityResponse;
-import com.codeiary.domain.users.dto.response.ProfileImageResponse;
 import com.codeiary.domain.users.exception.UserErrorCode;
 import com.codeiary.domain.users.fixture.UserFixture;
-import com.codeiary.domain.users.fixture.ProfileImageFixture;
-import com.codeiary.domain.users.service.ProfileImageService;
 import com.codeiary.domain.users.service.UserService;
 import com.codeiary.global.exception.GlobalExceptionHandler;
 import com.codeiary.global.exception.RestApiException;
@@ -43,16 +40,13 @@ class UserControllerTest {
     @Mock
     private UserService userService;
 
-    @Mock
-    private ProfileImageService profileImageService;
-
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(UserFixture.createWithId(), null, List.of()));
-        mockMvc = MockMvcBuilders.standaloneSetup(new UserController(userService, profileImageService))
+        mockMvc = MockMvcBuilders.standaloneSetup(new UserController(userService))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -61,36 +55,6 @@ class UserControllerTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
-    }
-
-    @Test
-    @DisplayName("인증된 사용자 경로에 사진을 업로드할 수 있다.")
-    void uploadProfileImage() throws Exception {
-        // given
-        var image = ProfileImageFixture.jpeg();
-        String url = "https://img.codeiary.com/profiles/1/photo.jpg";
-        given(profileImageService.upload(UserFixture.ID, image)).willReturn(new ProfileImageResponse(url));
-
-        // when
-        MvcResult result = mockMvc.perform(multipart("/api/users/me/profile-image")
-                .file(image).param("userId", "999")).andReturn();
-
-        // then
-        status().isOk().match(result);
-        jsonPath("$.profileImageUrl").value(url).match(result);
-        then(profileImageService).should().upload(UserFixture.ID, image);
-        then(userService).shouldHaveNoInteractions();
-    }
-
-    @Test
-    @DisplayName("사진 파일이 없는 업로드를 거절할 수 있다.")
-    void rejectMissingProfileImage() throws Exception {
-        // when
-        MvcResult result = mockMvc.perform(multipart("/api/users/me/profile-image")).andReturn();
-
-        // then
-        status().isBadRequest().match(result);
-        then(profileImageService).shouldHaveNoInteractions();
     }
 
     @Test
