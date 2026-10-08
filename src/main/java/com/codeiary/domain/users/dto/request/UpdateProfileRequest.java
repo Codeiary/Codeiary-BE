@@ -10,7 +10,7 @@ public record UpdateProfileRequest(
         @NotBlank(message = "닉네임을 입력해 주세요.")
         @Pattern(regexp = "[가-힣A-Za-z0-9_]{2,20}", message = "닉네임은 한글, 영문, 숫자, 밑줄로 2~20자를 입력해 주세요.")
         String nickname,
-        @URL(protocol = "https", message = "프로필 이미지는 HTTPS 주소로 입력해 주세요.")
+        @URL(message = "올바른 프로필 이미지 주소를 입력해 주세요.")
         @Size(max = 2048)
         String profileImageUrl,
         @Pattern(regexp = "^(https://github[.]com/[A-Za-z0-9-]{1,39}/?)?$", message = "올바른 GitHub 프로필 주소를 입력해 주세요.")

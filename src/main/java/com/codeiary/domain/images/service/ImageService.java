@@ -3,7 +3,6 @@ package com.codeiary.domain.images.service;
 import com.codeiary.domain.images.dto.request.ImagePresignRequest;
 import com.codeiary.domain.images.dto.response.ImageUploadResponse;
 import com.codeiary.domain.images.exception.ImageErrorCode;
-import com.codeiary.global.config.MediaStorageProperties;
 import com.codeiary.global.exception.CommonErrorCode;
 import com.codeiary.global.exception.RestApiException;
 import java.net.URI;
@@ -11,6 +10,8 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.UUID;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import software.amazon.awssdk.core.exception.SdkException;
@@ -20,27 +21,24 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 @Service
+@RequiredArgsConstructor
 public class ImageService {
 
     private static final long MAX_BYTES = 10L * 1024 * 1024;
     private static final Duration URL_TTL = Duration.ofMinutes(5);
 
     private final S3Presigner presigner;
-    private final MediaStorageProperties properties;
 
-    public ImageService(S3Presigner presigner, MediaStorageProperties properties) {
-        this.presigner = presigner;
-        this.properties = properties;
-    }
+    @Value("${cloud.aws.s3.bucket}")
+    private String bucket;
+
+    @Value("${cloud.aws.s3.public-base-url}")
+    private String imageBaseUrl;
+
+    @Value("${cloud.aws.s3.endpoint:}")
+    private String endpoint;
 
     public ImageUploadResponse presign(Long userId, ImagePresignRequest request) {
-        if (userId == null || userId <= 0) {
-            throw new RestApiException(CommonErrorCode.INVALID_PARAMETER);
-        }
-        if (request == null || request.contentLength() == null || request.contentLength() <= 0
-                || request.contentType() == null) {
-            throw new RestApiException(ImageErrorCode.INVALID_IMAGE);
-        }
         if (request.contentLength() > MAX_BYTES) {
             throw new RestApiException(CommonErrorCode.PAYLOAD_TOO_LARGE);
         }
@@ -53,7 +51,7 @@ public class ImageService {
         String publicBaseUrl = publicBaseUrl();
         String key = "images/" + userId + "/" + UUID.randomUUID() + "." + extension;
         var putObject = PutObjectRequest.builder()
-                .bucket(properties.bucket().trim())
+                .bucket(bucket.trim())
                 .key(key)
                 .contentType(contentType)
                 .contentLength(request.contentLength())
@@ -79,15 +77,41 @@ public class ImageService {
         }
     }
 
+    public void validateImageUrl(String value) {
+        if (!allowsImageUrl(value)) {
+            throw new RestApiException(CommonErrorCode.INVALID_PARAMETER);
+        }
+    }
+
+    private boolean allowsImageUrl(String value) {
+        try {
+            URI url = URI.create(value);
+            if (url.getHost() == null || url.getUserInfo() != null) {
+                return false;
+            }
+            if ("https".equalsIgnoreCase(url.getScheme())) {
+                return true;
+            }
+            URI localEndpoint = StringUtils.hasText(endpoint) ? URI.create(endpoint) : null;
+            return localEndpoint != null && "http".equals(localEndpoint.getScheme())
+                    && "localhost".equals(localEndpoint.getHost())
+                    && "http".equals(url.getScheme()) && "localhost".equals(url.getHost())
+                    && url.getPort() == localEndpoint.getPort()
+                    && (url.getPath().equals("/" + bucket) || url.getPath().startsWith("/" + bucket + "/"));
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
     private String publicBaseUrl() {
-        if (!StringUtils.hasText(properties.bucket()) || !StringUtils.hasText(properties.publicBaseUrl())) {
+        if (!StringUtils.hasText(bucket) || !StringUtils.hasText(imageBaseUrl)) {
             throw new RestApiException(ImageErrorCode.IMAGE_UPLOAD_UNAVAILABLE);
         }
         try {
-            URI base = URI.create(properties.publicBaseUrl().trim());
-            if (!"https".equalsIgnoreCase(base.getScheme()) || base.getHost() == null
-                    || base.getUserInfo() != null || base.getQuery() != null || base.getFragment() != null) {
-                throw new IllegalArgumentException("A public HTTPS media URL is required");
+            URI base = URI.create(imageBaseUrl.trim());
+            if (!allowsImageUrl(base.toString())
+                    || base.getQuery() != null || base.getFragment() != null) {
+                throw new IllegalArgumentException("A valid public media URL is required");
             }
             return base.toString().replaceAll("/+$", "");
         } catch (IllegalArgumentException exception) {

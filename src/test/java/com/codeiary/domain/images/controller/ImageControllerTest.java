@@ -73,7 +73,8 @@ class ImageControllerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"{}", "{\"contentType\":\"image/png\",\"contentLength\":0}",
+    @ValueSource(strings = {"", "null", "{}", "{\"contentType\":\"image/png\",\"contentLength\":null}",
+            "{\"contentType\":null,\"contentLength\":128}", "{\"contentType\":\"image/png\",\"contentLength\":0}",
             "{\"contentType\":\"image/png\",\"contentLength\":-1}",
             "{\"contentType\":\"\",\"contentLength\":128}"})
     @DisplayName("필수 항목이 없거나 파일 크기가 잘못되면 거절할 수 있다.")

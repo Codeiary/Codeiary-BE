@@ -10,3 +10,9 @@ spring:
 auth:
   token-cleanup:
     enabled: false
+
+cloud:
+  aws:
+    s3:
+      access-key: test
+      secret-key: test
