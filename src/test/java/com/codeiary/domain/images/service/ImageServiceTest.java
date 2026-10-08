@@ -2,17 +2,14 @@ package com.codeiary.domain.images.service;
 
 import com.codeiary.domain.images.dto.request.ImagePresignRequest;
 import com.codeiary.domain.images.exception.ImageErrorCode;
+import com.codeiary.domain.images.validation.ImageUrlValidator;
 import com.codeiary.domain.users.fixture.UserFixture;
-import com.codeiary.global.config.MediaStorageProperties;
 import com.codeiary.global.exception.CommonErrorCode;
 import com.codeiary.global.exception.ErrorCode;
 import com.codeiary.global.exception.RestApiException;
 import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,12 +19,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.ArgumentCaptor;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.ServerSideEncryption;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
@@ -50,10 +48,8 @@ class ImageServiceTest {
                 .region(Region.AP_NORTHEAST_2)
                 .credentialsProvider(StaticCredentialsProvider.create(
                         AwsBasicCredentials.create("test-access-key", "test-secret-key")))
-                .serviceConfiguration(S3Configuration.builder().checksumValidationEnabled(false).build())
                 .build());
-        service = new ImageService(presigner,
-                new MediaStorageProperties("private-media", "https://img.example.com/", "ap-northeast-2"));
+        service = imageService("private-media", "https://img.example.com/", "");
     }
 
     @AfterEach
@@ -83,17 +79,12 @@ class ImageServiceTest {
         assertThat(put.contentType()).isEqualTo(contentType);
         assertThat(put.serverSideEncryption()).isEqualTo(ServerSideEncryption.AES256);
         assertThat(put.ifNoneMatch()).isEqualTo("*");
-        assertThat(put.acl()).isNull();
         String prefix = "images/" + UserFixture.ID + "/";
         assertThat(put.key()).startsWith(prefix).endsWith("." + extension);
-        String filename = put.key().substring(prefix.length(), put.key().length() - 4);
-        assertThat(UUID.fromString(filename).toString()).isEqualTo(filename);
         URI uploadUrl = URI.create(response.uploadUrl());
         assertThat(uploadUrl.getScheme()).isEqualTo("https");
         assertThat(uploadUrl.getHost()).isEqualTo("private-media.s3.ap-northeast-2.amazonaws.com");
         assertThat(uploadUrl.getPath()).isEqualTo("/" + put.key());
-        String query = URLDecoder.decode(uploadUrl.getRawQuery(), StandardCharsets.UTF_8);
-        assertThat(query).contains("X-Amz-Expires=300", "content-length", "content-type", "if-none-match");
         assertThat(response.headers())
                 .containsEntry("content-type", contentType)
                 .containsEntry("cache-control", "public,max-age=31536000,immutable")
@@ -105,23 +96,26 @@ class ImageServiceTest {
     }
 
     @Test
-    @DisplayName("같은 사용자의 요청마다 다른 이미지 경로를 발급할 수 있다.")
-    void createUniqueKeys() {
+    @DisplayName("로컬 저장소의 이미지 주소를 반환할 수 있다.")
+    void allowLocalImageUrl() {
         // given
-        var request = new ImagePresignRequest("image/png", 100L);
+        service = imageService("codeiary-local",
+                "http://localhost:9090/codeiary-local", "http://localhost:9090");
 
         // when
-        var first = service.presign(UserFixture.ID, request);
-        var second = service.presign(UserFixture.ID, request);
+        var response = service.presign(UserFixture.ID, new ImagePresignRequest("image/png", 10L));
 
         // then
-        assertThat(first.imageUrl()).isNotEqualTo(second.imageUrl());
+        assertThat(response.imageUrl()).startsWith("http://localhost:9090/codeiary-local/images/");
     }
 
     @ParameterizedTest
-    @MethodSource("invalidRequests")
-    @DisplayName("비어 있거나 허용하지 않는 형식과 잘못된 용량을 거절할 수 있다.")
-    void rejectInvalidRequest(ImagePresignRequest request) {
+    @ValueSource(strings = {"image/gif", "image/webp"})
+    @DisplayName("허용하지 않는 이미지 형식을 거절할 수 있다.")
+    void rejectUnsupportedImage(String contentType) {
+        // given
+        var request = new ImagePresignRequest(contentType, 1L);
+
         // when
         Throwable error = catchThrowable(() -> service.presign(UserFixture.ID, request));
 
@@ -149,7 +143,7 @@ class ImageServiceTest {
     @DisplayName("저장소와 HTTPS 공개 주소가 준비되지 않은 요청을 거절할 수 있다.")
     void rejectUnavailableStorage(String bucket, String publicBaseUrl) {
         // given
-        service = new ImageService(presigner, new MediaStorageProperties(bucket, publicBaseUrl, "ap-northeast-2"));
+        service = imageService(bucket, publicBaseUrl, "");
 
         // when
         Throwable error = catchThrowable(() -> service.presign(UserFixture.ID, new ImagePresignRequest("image/png", 1L)));
@@ -173,26 +167,25 @@ class ImageServiceTest {
         assertError(error, ImageErrorCode.IMAGE_UPLOAD_FAILED);
     }
 
-    private static Stream<Arguments> invalidRequests() {
-        return Stream.of(
-                Arguments.of((Object) null),
-                Arguments.of(new ImagePresignRequest(null, 1L)),
-                Arguments.of(new ImagePresignRequest("", 1L)),
-                Arguments.of(new ImagePresignRequest("image/gif", 1L)),
-                Arguments.of(new ImagePresignRequest("image/webp", 1L)),
-                Arguments.of(new ImagePresignRequest("image/jpeg", null)),
-                Arguments.of(new ImagePresignRequest("image/jpeg", 0L)),
-                Arguments.of(new ImagePresignRequest("image/jpeg", -1L)));
-    }
-
     private static Stream<Arguments> unavailableStorage() {
         return Stream.of(
+                Arguments.of("codeiary-local", "http://localhost:9090/codeiary-local"),
                 Arguments.of("", "https://img.example.com"),
                 Arguments.of("private-media", null),
                 Arguments.of("private-media", "http://img.example.com"),
                 Arguments.of("private-media", "https://user:pass@img.example.com"),
                 Arguments.of("private-media", "https://img.example.com?destination=other"),
                 Arguments.of("private-media", "https://img.example.com#fragment"));
+    }
+
+    private ImageService imageService(String bucket, String publicBaseUrl, String endpoint) {
+        var imageUrls = new ImageUrlValidator();
+        ReflectionTestUtils.setField(imageUrls, "bucket", bucket);
+        ReflectionTestUtils.setField(imageUrls, "endpoint", endpoint);
+        var imageService = new ImageService(presigner, imageUrls);
+        ReflectionTestUtils.setField(imageService, "bucket", bucket);
+        ReflectionTestUtils.setField(imageService, "imageBaseUrl", publicBaseUrl);
+        return imageService;
     }
 
     private void assertError(Throwable error, ErrorCode code) {

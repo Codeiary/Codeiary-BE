@@ -1,8 +1,10 @@
 package com.codeiary.global.security.dto.adapter;
 
 import java.util.Map;
-import java.util.Locale;
+import com.codeiary.domain.users.entity.enums.OAuthProvider;
 
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 
 import com.codeiary.global.security.dto.OAuth2Response;
@@ -23,12 +25,9 @@ public final class OAuth2ResponseFactory {
             String registrationId,
             Map<String, Object> attributes
     ) {
-        return switch (registrationId.toLowerCase(Locale.ROOT)) {
-            case "google" -> new GoogleOAuth2Response(attributes);
-            case "naver" -> new NaverOAuth2Response(attributes);
-            default -> throw new IllegalArgumentException(
-                    "지원하지 않는 OAuth2 provider입니다: " + registrationId
-            );
-        };
+        if (OAuthProvider.GOOGLE.getRegistrationId().equalsIgnoreCase(registrationId)) {
+            return new GoogleOAuth2Response(attributes);
+        }
+        throw new OAuth2AuthenticationException(new OAuth2Error("unsupported_provider"));
     }
 }

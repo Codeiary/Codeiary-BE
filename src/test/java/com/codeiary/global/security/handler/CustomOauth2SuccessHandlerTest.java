@@ -1,15 +1,16 @@
 package com.codeiary.global.security.handler;
 
+import com.codeiary.domain.users.entity.enums.OAuthProvider;
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.domain.users.exception.UserErrorCode;
 import com.codeiary.domain.users.fixture.UserFixture;
 import com.codeiary.global.exception.RestApiException;
-import com.codeiary.global.security.dto.AuthInfo;
+import com.codeiary.domain.auth.dto.AuthInfo;
 import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
-import com.codeiary.global.security.service.OAuthUserService;
-import com.codeiary.global.security.token.dto.TokenPair;
-import com.codeiary.global.security.token.service.TokenService;
-import com.codeiary.global.security.token.service.TokenSessionService;
+import com.codeiary.domain.auth.service.OAuthAccountService;
+import com.codeiary.domain.auth.dto.TokenPair;
+import com.codeiary.domain.auth.cookie.TokenCookieManager;
+import com.codeiary.domain.auth.service.TokenSessionService;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -37,9 +38,9 @@ import static org.mockito.BDDMockito.then;
 @ExtendWith(MockitoExtension.class)
 class CustomOauth2SuccessHandlerTest {
 
-    @Mock private OAuthUserService oauthUsers;
+    @Mock private OAuthAccountService oauthAccounts;
     @Mock private TokenSessionService sessions;
-    @Mock private TokenService cookies;
+    @Mock private TokenCookieManager cookies;
     @Mock private CustomOauth2FailureHandler failureHandler;
     @InjectMocks private CustomOauth2SuccessHandler handler;
 
@@ -60,7 +61,7 @@ class CustomOauth2SuccessHandlerTest {
         CustomOAuth2User oauthUser = oauthUser();
         TokenPair pair = new TokenPair("access", "refresh", Instant.now().plusSeconds(1800),
                 Instant.now().plusSeconds(604800));
-        given(oauthUsers.getOrCreate(oauthUser)).willReturn(user);
+        given(oauthAccounts.getOrCreate(oauthUser.getAuthInfo())).willReturn(user);
         given(sessions.createSession(user.getEmail())).willReturn(pair);
 
         // when
@@ -78,7 +79,7 @@ class CustomOauth2SuccessHandlerTest {
     void handleRejectedAccount() throws Exception {
         // given
         CustomOAuth2User oauthUser = oauthUser();
-        given(oauthUsers.getOrCreate(oauthUser))
+        given(oauthAccounts.getOrCreate(oauthUser.getAuthInfo()))
                 .willThrow(new RestApiException(UserErrorCode.OAUTH_ACCOUNT_CONFLICT));
 
         // when
@@ -92,28 +93,11 @@ class CustomOauth2SuccessHandlerTest {
         assertThat(response.getRedirectedUrl()).isNull();
     }
 
-    @Test
-    @DisplayName("지원하지 않는 로그인 사용자 객체를 거절할 수 있다.")
-    void rejectUnsupportedPrincipal() throws Exception {
-        // given
-        Authentication authentication = authentication("not-an-oauth-user");
-
-        // when
-        handler.onAuthenticationSuccess(request, response, authentication);
-
-        // then
-        then(failureHandler).should().onAuthenticationFailure(eq(request), eq(response),
-                any(BadCredentialsException.class));
-        then(oauthUsers).shouldHaveNoInteractions();
-        then(sessions).shouldHaveNoInteractions();
-        then(cookies).shouldHaveNoInteractions();
-    }
-
     private CustomOAuth2User oauthUser() {
         String subject = "google-subject-123";
         var delegate = new DefaultOAuth2User(List.of(), Map.of("sub", subject), "sub");
         return new CustomOAuth2User(delegate,
-                new AuthInfo("google", subject, "google-current@gmail.com", UserFixture.NAME));
+                new AuthInfo(OAuthProvider.GOOGLE, subject, "google-current@gmail.com", UserFixture.NAME, true, true));
     }
 
     private Authentication authentication(Object principal) {

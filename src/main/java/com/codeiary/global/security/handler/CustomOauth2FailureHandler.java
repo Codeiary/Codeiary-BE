@@ -14,7 +14,7 @@ import jakarta.servlet.http.HttpServletResponse;
 @Component
 public class CustomOauth2FailureHandler implements AuthenticationFailureHandler {
 
-    @Value("${oauth2.redirect-home:http://localhost:5173/auth/callback}")
+    @Value("${oauth2.redirect-home}")
     private String redirectHome;
 
     @Override

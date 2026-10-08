@@ -1,7 +1,10 @@
 package com.codeiary.domain.users.entity;
 
+import com.codeiary.domain.users.entity.enums.OAuthProvider;
 import com.codeiary.domain.users.entity.enums.Role;
+import com.codeiary.domain.users.exception.UserErrorCode;
 import com.codeiary.global.entity.TimeBaseEntity;
+import com.codeiary.global.exception.RestApiException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -14,6 +17,7 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.util.Objects;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -48,8 +52,9 @@ public class User extends TimeBaseEntity {
     @Column(length = 254)
     private String contactEmail;
 
+    @Enumerated(EnumType.STRING)
     @Column(length = 20)
-    private String oauthProvider;
+    private OAuthProvider oauthProvider;
 
     @Column(length = 255)
     private String oauthSubject;
@@ -61,24 +66,52 @@ public class User extends TimeBaseEntity {
     @Column(nullable = false)
     private boolean enabled = true;
 
-    public User(String email, String name) {
-        this(email, name, Role.PENDING);
-    }
-
-    public User(String email, String name, Role role) {
+    @Builder(access = AccessLevel.PRIVATE)
+    private User(String email, String name, Role role, OAuthProvider oauthProvider, String oauthSubject) {
         this.email = email;
         this.name = name;
         this.role = Objects.requireNonNull(role);
+        this.oauthProvider = oauthProvider;
+        this.oauthSubject = oauthSubject;
     }
 
-    public User(String email, String name, String oauthProvider, String oauthSubject) {
-        this(email, name);
-        linkOAuthAccount(oauthProvider, oauthSubject);
+    public static User create(String email, String name) {
+        return create(email, name, Role.PENDING);
     }
 
-    public void linkOAuthAccount(String provider, String subject) {
+    public static User create(String email, String name, Role role) {
+        return User.builder()
+                .email(email)
+                .name(name)
+                .role(role)
+                .build();
+    }
+
+    public static User createOAuth(String email, String name, OAuthProvider provider, String subject) {
+        return User.builder()
+                .email(email)
+                .name(name)
+                .role(Role.PENDING)
+                .oauthProvider(provider)
+                .oauthSubject(subject)
+                .build();
+    }
+
+    public void linkOAuthAccount(OAuthProvider provider, String subject) {
+        if (hasOAuthAccount() && !isLinkedTo(provider, subject)) {
+            throw new RestApiException(UserErrorCode.OAUTH_ACCOUNT_CONFLICT);
+        }
         this.oauthProvider = provider;
         this.oauthSubject = subject;
+    }
+
+    public boolean hasOAuthAccount() {
+        return oauthProvider != null || oauthSubject != null;
+    }
+
+    public boolean isLinkedTo(OAuthProvider provider, String subject) {
+        return provider != null && subject != null
+                && oauthProvider == provider && subject.equals(oauthSubject);
     }
 
     public void disable() {

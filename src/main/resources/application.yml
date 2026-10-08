@@ -21,11 +21,14 @@ server:
 oauth2:
   redirect-home: ${OAUTH2_REDIRECT_HOME:http://localhost:5173/auth/callback}
 
-media:
-  s3:
-    bucket: ${MEDIA_S3_BUCKET:}
-    public-base-url: ${MEDIA_PUBLIC_BASE_URL:}
-    region: ${AWS_REGION:ap-northeast-2}
+cloud:
+  aws:
+    s3:
+      region: ${AWS_REGION:ap-northeast-2}
+      access-key: ${AWS_ACCESS_KEY_ID:}
+      secret-key: ${AWS_SECRET_ACCESS_KEY:}
+      bucket: ${MEDIA_S3_BUCKET:}
+      public-base-url: ${MEDIA_PUBLIC_BASE_URL:}
 
 token:
   jwt:
@@ -42,8 +45,6 @@ token:
     secure: ${TOKEN_COOKIE_SECURE:false}
     http-only: true
     same-site: ${TOKEN_COOKIE_SAME_SITE:Strict}
-    access-max-age: 30m
-    refresh-max-age: 7d
 
 springdoc:
   api-docs:

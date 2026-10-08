@@ -19,15 +19,15 @@ public final class UserFixture {
     }
 
     public static User create(String email) {
-        return new User(email, NAME, Role.ADMIN);
+        return User.create(email, NAME, Role.ADMIN);
     }
 
     public static User create(Role role) {
-        return new User(EMAIL, NAME, role);
+        return User.create(EMAIL, NAME, role);
     }
 
     public static User createDefaultUser() {
-        return new User(EMAIL, NAME);
+        return User.create(EMAIL, NAME);
     }
 
     public static User createWithId() {

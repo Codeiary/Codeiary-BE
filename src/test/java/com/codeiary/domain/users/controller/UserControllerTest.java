@@ -1,13 +1,10 @@
 package com.codeiary.domain.users.controller;
 
-import com.codeiary.domain.users.dto.request.OnboardingRequest;
 import com.codeiary.domain.users.dto.request.UpdateProfileRequest;
 import com.codeiary.domain.users.dto.response.NicknameAvailabilityResponse;
-import com.codeiary.domain.users.exception.UserErrorCode;
 import com.codeiary.domain.users.fixture.UserFixture;
 import com.codeiary.domain.users.service.UserService;
 import com.codeiary.global.exception.GlobalExceptionHandler;
-import com.codeiary.global.exception.RestApiException;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,23 +71,6 @@ class UserControllerTest {
         then(userService).should().checkNickname(UserFixture.ID, "기록자");
     }
 
-    @Test
-    @DisplayName("닉네임으로 온보딩을 완료할 수 있다.")
-    void completeOnboarding() throws Exception {
-        // given
-        OnboardingRequest request = new OnboardingRequest("기록자");
-        given(userService.completeOnboarding(UserFixture.ID, request)).willReturn(UserFixture.response());
-
-        // when
-        MvcResult result = mockMvc.perform(multipart("/api/users/me/onboarding")
-                .param("nickname", "기록자")).andReturn();
-
-        // then
-        status().isOk().match(result);
-        jsonPath("$.id").value(UserFixture.ID).match(result);
-        then(userService).should().completeOnboarding(UserFixture.ID, request);
-    }
-
     @ParameterizedTest
     @ValueSource(strings = {"", "x", "두 단어"})
     @DisplayName("비어 있거나 잘못된 닉네임을 거절할 수 있다.")
@@ -139,21 +119,4 @@ class UserControllerTest {
         then(userService).shouldHaveNoInteractions();
     }
 
-    @Test
-    @DisplayName("중복 닉네임 오류를 응답할 수 있다.")
-    void rejectDuplicateNickname() throws Exception {
-        // given
-        OnboardingRequest request = new OnboardingRequest("기록자");
-        given(userService.completeOnboarding(UserFixture.ID, request))
-                .willThrow(new RestApiException(UserErrorCode.NICKNAME_TAKEN));
-
-        // when
-        MvcResult result = mockMvc.perform(multipart("/api/users/me/onboarding")
-                .param("nickname", "기록자")).andReturn();
-
-        // then
-        status().isConflict().match(result);
-        jsonPath("$.code").value("NICKNAME_TAKEN").match(result);
-        then(userService).should().completeOnboarding(UserFixture.ID, request);
-    }
 }

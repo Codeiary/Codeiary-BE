@@ -1,15 +1,15 @@
 package com.codeiary.global.security.service;
 
-import com.codeiary.global.security.dto.AuthInfo;
+import com.codeiary.domain.auth.dto.AuthInfo;
 import com.codeiary.global.security.dto.OAuth2Response;
 import com.codeiary.global.security.dto.adapter.OAuth2ResponseFactory;
 import com.codeiary.global.security.dto.oauth2user.CustomOidcUser;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 
-@Service
+@Component
 public class CustomOidcUserService extends OidcUserService {
 
     @Override
@@ -18,7 +18,8 @@ public class CustomOidcUserService extends OidcUserService {
         OAuth2Response profile = OAuth2ResponseFactory.from(
                 request.getClientRegistration().getRegistrationId(), user.getAttributes());
         AuthInfo authInfo = new AuthInfo(
-                profile.getProvider(), profile.getSubject(), profile.getEmail(), profile.getName());
+                profile.getProvider(), profile.getSubject(), profile.getEmail(), profile.getName(),
+                profile.isEmailVerified(), profile.isEmailAuthoritative());
         return new CustomOidcUser(user, authInfo);
     }
 }

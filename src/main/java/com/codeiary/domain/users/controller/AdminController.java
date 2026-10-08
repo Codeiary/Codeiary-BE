@@ -2,7 +2,7 @@ package com.codeiary.domain.users.controller;
 
 import com.codeiary.domain.users.dto.response.UserProfileResponse;
 import com.codeiary.domain.users.entity.User;
-import com.codeiary.domain.users.service.AdminService;
+import com.codeiary.domain.users.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,11 +19,11 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "cookieAuth")
 public class AdminController {
 
-    private final AdminService adminService;
+    private final UserService userService;
 
     @GetMapping("/me")
     @Operation(summary = "로그인한 관리자 조회")
     public UserProfileResponse me(@AuthenticationPrincipal User user) {
-        return adminService.getProfile(user);
+        return userService.getProfile(user);
     }
 }

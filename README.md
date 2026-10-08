@@ -20,14 +20,17 @@ QueryDSL은 `JPAQueryFactory`를 주입받아 사용합니다. `@Entity`를 작�
 `build/generated/sources/annotationProcessor/java/main`에 자동으로 생성됩니다.
 생성된 코드는 Git에 포함하지 않습니다.
 
-STS에서는 프로젝트의 `Gradle > Refresh Gradle Project`로 동기화합니다.
-라이브러리는 `Project and External Dependencies`로 묶어 관리하고,
-[어노테이션 처리 플러그인](https://plugins.gradle.org/plugin/com.diffplug.eclipse.apt)이
-MapStruct·QueryDSL의 처리 경로를 설정합니다. STS 자동 빌드가 생성 코드를 갱신합니다.
-별도로 `eclipseClasspath`를 실행하거나 JAR를 직접 추가하지 않습니다.
+STS에서는 의존성을 변경한 뒤 `Gradle > Refresh Gradle Project`로 동기화합니다.
+라이브러리는 `Project and External Dependencies`로 묶어 관리하며 JAR를 직접 추가하지 않습니다.
 
-Gradle 생성 코드는 `build/generated/sources/annotationProcessor/java/`,
-STS 생성 코드는 `.apt_generated`와 `.apt_generated_tests`에 보관하며 Git에서 제외합니다.
+생성 코드가 중복되지 않도록 어노테이션 처리는 Gradle에서 실행합니다.
+`./gradlew compileJava compileTestJava`로 생성 코드를 갱신하고, STS 프로젝트 설정에서
+`Java Compiler > Annotation Processing`을 비활성화합니다.
+`Java Build Path > Source`에는 Gradle 생성 경로인
+`build/generated/sources/annotationProcessor/java/main`과 `test`를 등록합니다.
+기존 `.apt_generated`, `.apt_generated_tests` 또는 잘못된 절대 경로로 등록된
+생성 소스 항목은 제거하고 프로젝트를 새로고침합니다.
+생성 코드와 `.classpath`, `.settings` 등 IDE 로컬 설정은 Git에 포함하지 않습니다.
 같은 폴더를 VS Code에서도 열 때는 `.vscode/settings.json`의
 `java.autobuild.enabled`를 `false`로 설정해 두 IDE가 `bin/`을 동시에 덮어쓰지 않게 합니다.
 
@@ -88,7 +91,7 @@ Refresh Token은 원문 대신 SHA-256 해시를 DB에 저장하고, 재발급 �
 로그아웃할 수 있고, 유효한 토큰이 없어도 쿠키 삭제와 204 응답을 반환합니다.
 계정이 삭제되거나 비활성화되면 인증과 재발급을 차단하며,
 요청마다 DB의 현재 권한을 사용하므로 권한 변경도 다음 요청부터 반영됩니다.
-`TokenCleanupService`가 매일 새벽 3시(Asia/Seoul)에 만료된 토큰과 블랙리스트 기록을 삭제합니다.
+`TokenCleanupScheduler`가 매일 새벽 3시(Asia/Seoul)에 만료된 토큰과 블랙리스트 기록을 삭제합니다.
 실행 시간과 활성화 여부는 `auth.token-cleanup.cron`, `auth.token-cleanup.enabled`로 설정합니다.
 
 `/api/admin/**`에는 ADMIN 권한이 필요합니다. `PENDING` 계정은 본인 조회,
@@ -100,12 +103,19 @@ GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요
 기존 `{ "message": "...", "code": "..." }` 형식을 사용합니다.
 현재 CSRF 검사는 비활성화되어 있고, 인증 쿠키의 SameSite 기본값은 Strict입니다.
 
-공통 인증 코드는 `global/security`에 둡니다. OAuth2 사용자 조회는 `service`,
-로그인 결과 처리는 `handler`에서 담당합니다. 재발급·로그아웃 API는
-`global/security/token/controller/TokenController`에 둡니다.
-`global/security/token`의 `service/TokenSessionService`는 로그인 세션·재발급·폐기를,
-`service/TokenService`는 쿠키 처리를 담당합니다. JWT 생성·검증은 `provider`,
-인증 필터는 `cookie`, 토큰 엔티티와 저장소는 `entity`, `repository`에서 관리합니다.
+인증 업무는 `domain/auth`에서 관리합니다. `controller/TokenController`는 재발급·로그아웃 API를,
+`service/OAuthAccountService`는 OAuth 계정 생성·연결을,
+`service/TokenSessionService`는 로그인 세션·재발급·폐기를 담당합니다.
+리프레시 토큰과 블랙리스트는 `entity`, `repository`에 두고,
+만료된 기록은 `scheduler/TokenCleanupScheduler`에서 정리합니다.
+같은 `domain/auth`의 `provider/JwtTokenProvider`는 JWT 생성·검증을,
+`cookie/TokenCookieManager`는 쿠키 처리를 담당합니다. 쿠키 관리와 예약 작업은 `@Component`로 등록합니다.
+인증 정보인 `AuthInfo`, JWT 발급 결과인 `TokenPair`와 공통 토큰 오류인 `TokenErrorCode`도 이 패키지에서 관리합니다.
+`User`가 기존 OAuth 연결의 덮어쓰기를 막으며, 서비스는 이메일·OAuth 식별자 중복만 가입 충돌로 처리합니다.
+
+Spring Security 연동은 `global/security`에 둡니다. OAuth2/OIDC 사용자 정보 조회는 `service`,
+인증·인가 오류 응답 처리는 `exception`, 로그인 결과 처리는 `handler`, 사용자 객체와 어댑터는 `dto`에서 담당합니다. 이 연동 클래스들은 `@Component`로 등록하고, 업무 규칙을 처리하는 서비스는 `@Service`로 구분합니다.
+요청 인증 필터는 `global/security/filter/TokenAuthenticationFilter`에 둡니다.
 
 ### 사용자 온보딩과 공개 프로필
 
@@ -113,6 +123,7 @@ GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요
 인증 필터는 검증한 `User`를 principal로 저장하며, 본인 정보 조회·수정은
 `@AuthenticationPrincipal User user`의 식별자를 사용합니다.
 `UserMapper`가 본인용 `UserProfileResponse`와 공개용 `PublicUserProfileResponse`를 구분합니다.
+사용자·관리자의 본인 프로필 조회는 `UserService.getProfile`을 공유하며, 관리자 권한 검사는 Security 설정에서 처리합니다.
 
 | 요청 | 경로 | 인증 / 입력 | 성공 응답 |
 | --- | --- | --- | --- |
@@ -127,7 +138,7 @@ GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요
 | 입력 필드 | 온보딩 | 프로필 수정 | 검증 |
 | --- | --- | --- | --- |
 | `nickname` | 필수 | 필수 | 한글·영문·숫자·밑줄 2~20자, 대소문자 무관 중복 제한 |
-| `profileImageUrl` | — | 선택 | HTTPS URL, 최대 2,048자 |
+| `profileImageUrl` | — | 선택 | HTTPS URL, 최대 2,048자 (로컬 실행은 로컬 S3 주소도 허용) |
 | `githubUrl` | — | 선택 | `https://github.com/{사용자명}` 형태, 최대 255자 |
 | `contactEmail` | — | 선택 | 공개할 연락 이메일, 최대 254자 |
 
@@ -141,6 +152,7 @@ GET `/api/users/me`와 `/api/users/nickname-availability`에도 인증이 필요
 
 S3 업로드 성공 후 응답의 `imageUrl`을 `PUT /api/users/me/profile`의 `profileImageUrl`로
 저장해야 사용자 프로필에 적용됩니다. URL 발급과 S3 업로드는 사용자 DB를 변경하지 않습니다.
+이미지 URL 검증은 `ImageUrlValidator`가 담당하며, `UserService`는 S3 서명 서비스에 의존하지 않습니다.
 기존 multipart `POST /api/users/me/profile-image`는 제거했으므로 프론트와 백엔드를 함께 배포해야 합니다.
 
 프로필 수정은 전체 수정입니다. 선택 필드를 생략하거나 `null` 또는 빈 문자열로 보내면
@@ -196,12 +208,13 @@ DB 환경 변수나 별도의 PostgreSQL 실행은 필요하지 않습니다.
 컨테이너는 테스트 컨텍스트 종료 시 정리됩니다.
 
 통합 테스트는 `IntegrationTestSupport`로 DB 설정을 공유합니다.
-예외 처리·OpenAPI·코드 생성·사용자 저장소 테스트와,
-`global/security/token`의 JWT 검증·쿠키 처리·로그아웃·토큰 재발급·블랙리스트 단위 테스트가 있습니다.
+실제 API의 인증·권한 통합 테스트와 사용자 저장소 테스트,
+`domain/auth`의 로그인·로그아웃·토큰 재발급·블랙리스트·JWT 검증·쿠키 처리 단위 테스트가 있습니다.
 사용자 테스트 객체는 `domain/users/fixture/UserFixture`에서 관리합니다.
 OAuth 신규 가입·기존 계정 연결, 온보딩·프로필 수정·공개 응답 범위와 입력 검증도 테스트합니다.
 서비스·컨트롤러 단위 테스트는 mock 저장소와 MockMvc를 사용하며 DB 없이 실행할 수 있습니다.
-사용자 저장소 테스트는 실제 PostgreSQL에서 공개 프로필 저장과 닉네임·OAuth 식별자 유니크 제약을 확인합니다.
+사용자 저장소 테스트는 실제 PostgreSQL에서 프로필 저장·생성/수정 시간과 이메일·닉네임·OAuth 식별자 유니크 제약을 확인합니다.
+공통 예외 응답은 DB 없이 MockMvc로 확인합니다. 별도의 가짜 엔티티나 프레임워크 코드 생성 테스트는 두지 않습니다.
 이미지 테스트는 요청 MIME·길이 검증, Presigned URL의 만료·경로·서명 헤더,
 저장소 설정 오류와 업로드 URL 발급 권한을 확인하며 AWS에 파일을 전송하지 않습니다.
 
@@ -268,6 +281,8 @@ Flyway의 기존 `V1__create_auth_tables.sql`은 보존합니다. V1은 `users`,
 닉네임 중복 방지 인덱스를 포함합니다. 사용자 비밀번호 컬럼은 없습니다.
 `V2__add_user_profiles_and_oauth_identity.sql`이 `github_url`, `contact_email`,
 `oauth_provider`, `oauth_subject`와 OAuth 식별자 유니크 인덱스를 추가합니다.
+OAuth 제공자는 `OAuthProvider` enum으로 관리하며, DB에는 기존 `google` 문자열을 그대로 저장합니다.
+제공자별 이메일 인증·소유권 판단은 어댑터가 담당하고, `OAuthAccountService`는 공통 `AuthInfo`로 가입·조회·계정 연결을 처리합니다.
 역할 CHECK 제약에 `PENDING`을 추가하고 기본값을 `PENDING`으로 변경하며,
 기존 `USER` 중 닉네임이 없는 계정도 `PENDING`으로 보정합니다.
 기존 DB는 데이터와 `flyway_schema_history`를 유지한 채 V2를 순차 적용합니다.
@@ -277,6 +292,36 @@ Flyway의 기존 `V1__create_auth_tables.sql`은 보존합니다. V1은 `users`,
 허용하고 `8080`, `5432`는 열지 않습니다.
 
 ## 이미지 업로드 API
+
+### 로컬 이미지 저장소
+
+Docker가 실행된 상태에서 백엔드 폴더에서 다음 명령을 실행합니다.
+
+```bash
+docker compose -f compose.local.yaml up -d
+```
+
+`local` 프로필은 `http://localhost:9090`의 S3Mock과 `codeiary-local` 버킷을 사용합니다.
+STS에서 백엔드를 재시작하면 Presigned URL 발급, 브라우저 PUT 업로드, 프로필 저장을
+로컬에서 사용할 수 있습니다. 실제 AWS 자격 증명이나 CloudFront는 필요하지 않으며,
+AWS 사용 요금이 발생하지 않습니다. 이미지는 Docker의 `images` 볼륨에 유지됩니다.
+`docker compose -f compose.local.yaml down`으로 중지하고, 데이터를 유지하려면 `-v`를 붙이지 않습니다.
+
+S3 설정은 `cloud.aws.s3` 아래에 둡니다.
+`S3PresignerConfig`에서 `@Value`로 리전, 자격 증명, 로컬 endpoint를 주입받아
+`S3Presigner`를 등록합니다. 버킷과 공개 주소는 `ImageService`에서 직접 주입받습니다.
+JWT와 쿠키 설정도 사용하는 클래스에서 `@Value`로 주입받습니다.
+쿠키 수명은 발급된 JWT의 남은 유효시간을 따르며, 만료 시간은 `token.jwt`에서만 설정합니다.
+`local` 프로필은 Docker 주소와 로컬 전용 자격 증명을 사용합니다.
+운영에서는 `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` 환경 변수와
+기존 버킷·CloudFront 주소를 사용하며, 별도 endpoint를 설정하지 않습니다.
+
+프론트 개발 서버에서만 `http://localhost:9090/codeiary-local/` 주소를 허용합니다.
+운영 빌드와 기본 백엔드 설정은 HTTPS를 요구합니다. 로컬 저장소 포트는 이 컴퓨터에만 노출됩니다.
+[S3Mock](https://github.com/adobe/S3Mock)은 업로드 흐름을 개발하기 위한 에뮬레이터이며,
+Presigned URL의 서명·만료와 AWS IAM 권한을 검증하는 환경은 아닙니다.
+
+### 업로드 계약
 
 `POST /api/images/presigned-url`은 S3에 직접 업로드할 URL을 발급합니다.
 로그인 쿠키가 있는 `USER`·`ADMIN`만 사용할 수 있으며, 비로그인은 401,
@@ -363,7 +408,7 @@ SSE-S3(`AES256`), 이미지 형식에 맞는 `Content-Type`, 1년 `immutable` �
 | `AWS_REGION` | S3 버킷 리전, 기본값 `ap-northeast-2` |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | SSM에서 전달받는 미디어 업로드 전용 IAM 자격증명 |
 
-S3 Presigner는 AWS SDK 기본 자격증명 공급망을 사용합니다. Lightsail의 API 컨테이너에는
+S3 Presigner는 `S3PresignerConfig`가 주입받은 키로 `StaticCredentialsProvider`를 구성합니다. Lightsail의 API 컨테이너에는
 전용 IAM 사용자 `codeiary-media-uploader`의 자격증명을 환경 변수로 전달합니다.
 이 사용자는 `arn:aws:s3:::<bucket>/images/*`에 대한 `s3:PutObject` 권한만 가지며,
 호스트의 SSM 관리 자격증명을 API와 공유하지 않습니다.

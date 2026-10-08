@@ -2,11 +2,12 @@ package com.codeiary.global.security.handler;
 
 import com.codeiary.domain.users.entity.User;
 import com.codeiary.global.exception.RestApiException;
-import com.codeiary.global.security.service.OAuthUserService;
-import com.codeiary.global.security.token.dto.TokenPair;
-import com.codeiary.global.security.token.service.TokenService;
-import com.codeiary.global.security.token.service.TokenSessionService;
+import com.codeiary.domain.auth.service.OAuthAccountService;
+import com.codeiary.domain.auth.dto.TokenPair;
+import com.codeiary.domain.auth.cookie.TokenCookieManager;
+import com.codeiary.domain.auth.service.TokenSessionService;
 import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
+import com.codeiary.global.security.exception.SecurityErrorCode;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,12 +23,12 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CustomOauth2SuccessHandler implements AuthenticationSuccessHandler {
 
-    private final OAuthUserService oauthUsers;
+    private final OAuthAccountService oauthAccounts;
     private final TokenSessionService sessions;
-    private final TokenService cookieService;
+    private final TokenCookieManager cookies;
     private final CustomOauth2FailureHandler failureHandler;
 
-    @Value("${oauth2.redirect-home:http://localhost:5173/auth/callback}")
+    @Value("${oauth2.redirect-home}")
     private String redirectHome;
 
     @Override
@@ -38,19 +39,19 @@ public class CustomOauth2SuccessHandler implements AuthenticationSuccessHandler 
     ) throws IOException {
         if (!(authentication.getPrincipal() instanceof CustomOAuth2User oauth2User)) {
             failureHandler.onAuthenticationFailure(request, response,
-                    new BadCredentialsException("Unavailable OAuth user"));
+                    new BadCredentialsException(SecurityErrorCode.UNAUTHORIZED.getMessage()));
             return;
         }
         TokenPair pair;
         try {
-            User user = oauthUsers.getOrCreate(oauth2User);
+            User user = oauthAccounts.getOrCreate(oauth2User.getAuthInfo());
             pair = sessions.createSession(user.getEmail());
         } catch (RestApiException exception) {
             failureHandler.onAuthenticationFailure(request, response,
-                    new BadCredentialsException("Unavailable user", exception));
+                    new BadCredentialsException(exception.getErrorCode().getMessage(), exception));
             return;
         }
-        cookieService.writeTokens(response, pair);
+        cookies.writeTokens(response, pair);
         response.sendRedirect(redirectHome);
     }
 }

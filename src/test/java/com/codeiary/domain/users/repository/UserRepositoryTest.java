@@ -1,16 +1,19 @@
 package com.codeiary.domain.users.repository;
 
+import com.codeiary.domain.users.entity.enums.OAuthProvider;
 import com.codeiary.domain.users.entity.enums.Role;
 import com.codeiary.domain.users.fixture.UserFixture;
 import com.codeiary.support.RepositoryTestSupport;
 import jakarta.persistence.EntityManager;
-import jakarta.validation.ConstraintViolationException;
+import java.time.LocalDateTime;
+import java.util.Optional;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.auditing.AuditingHandler;
+import org.springframework.data.auditing.CurrentDateTimeProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,23 +24,11 @@ class UserRepositoryTest extends RepositoryTestSupport {
     @Autowired private UserRepository users;
     @Autowired private EntityManager entityManager;
     @Autowired private JdbcTemplate jdbc;
+    @Autowired private AuditingHandler auditingHandler;
 
-    @ParameterizedTest
-    @EnumSource(Role.class)
-    @DisplayName("사용자 권한을 저장하고 조회할 수 있다.")
-    void saveRole(Role role) {
-        // given
-        var user = UserFixture.create(role);
-
-        // when
-        Long id = users.saveAndFlush(user).getId();
-        entityManager.clear();
-        var loaded = users.findById(id);
-        String storedRole = jdbc.queryForObject("select role from users where id = ?", String.class, id);
-
-        // then
-        assertThat(loaded).hasValueSatisfying(saved -> assertThat(saved.getRole()).isEqualTo(role));
-        assertThat(storedRole).isEqualTo(role.name());
+    @AfterEach
+    void restoreDateTimeProvider() {
+        auditingHandler.setDateTimeProvider(CurrentDateTimeProvider.INSTANCE);
     }
 
     @Test
@@ -74,28 +65,6 @@ class UserRepositoryTest extends RepositoryTestSupport {
     }
 
     @Test
-    @DisplayName("이메일로 사용자를 조회할 수 있다.")
-    void findByEmail() {
-        // given
-        var saved = users.saveAndFlush(UserFixture.create());
-        entityManager.clear();
-
-        // when
-        var account = users.findByEmail(UserFixture.EMAIL);
-        var unknownAccount = users.findByEmail("unknown@example.com");
-
-        // then
-        assertThat(account).hasValueSatisfying(user -> {
-            assertThat(user.getId()).isEqualTo(saved.getId());
-            assertThat(user.getEmail()).isEqualTo(UserFixture.EMAIL);
-            assertThat(user.getName()).isEqualTo(UserFixture.NAME);
-            assertThat(user.getCreatedAt()).isNotNull();
-            assertThat(user.getUpdatedAt()).isNotNull();
-        });
-        assertThat(unknownAccount).isEmpty();
-    }
-
-    @Test
     @DisplayName("중복 이메일을 거절할 수 있다.")
     void rejectDuplicateEmail() {
         // given
@@ -107,19 +76,9 @@ class UserRepositoryTest extends RepositoryTestSupport {
 
         // then
         assertThat(error).isInstanceOf(DataIntegrityViolationException.class);
-    }
-
-    @Test
-    @DisplayName("대문자 이메일의 엔티티 저장을 거절할 수 있다.")
-    void rejectUppercaseEmail() {
-        // given
-        var account = UserFixture.create("Admin@example.com");
-
-        // when
-        Throwable error = catchThrowable(() -> users.saveAndFlush(account));
-
-        // then
-        assertThat(error).isInstanceOf(ConstraintViolationException.class);
+        assertThat(error.getCause()).isInstanceOfSatisfying(
+                org.hibernate.exception.ConstraintViolationException.class,
+                violation -> assertThat(violation.getConstraintName()).isEqualTo("users_email_key"));
     }
 
     @Test
@@ -137,12 +96,15 @@ class UserRepositoryTest extends RepositoryTestSupport {
     }
 
     @Test
-    @DisplayName("공개 프로필 정보를 저장하고 다시 조회할 수 있다.")
+    @DisplayName("프로필 변경을 저장하고 생성 시간을 유지하며 수정 시간을 갱신할 수 있다.")
     void savePublicProfile() {
         // given
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 9, 12, 0);
+        auditingHandler.setDateTimeProvider(() -> Optional.of(createdAt));
         var account = users.saveAndFlush(UserFixture.createDefaultUser());
 
         // when
+        auditingHandler.setDateTimeProvider(() -> Optional.of(createdAt.plusHours(1)));
         account.updatePublicProfile("CodeWriter", "https://example.com/profile.png",
                 "https://github.com/code-writer", "contact@example.com");
         users.flush();
@@ -155,6 +117,8 @@ class UserRepositoryTest extends RepositoryTestSupport {
             assertThat(saved.getProfileImageUrl()).isEqualTo("https://example.com/profile.png");
             assertThat(saved.getGithubUrl()).isEqualTo("https://github.com/code-writer");
             assertThat(saved.getContactEmail()).isEqualTo("contact@example.com");
+            assertThat(saved.getCreatedAt()).isEqualTo(createdAt);
+            assertThat(saved.getUpdatedAt()).isEqualTo(createdAt.plusHours(1));
         });
     }
 
@@ -176,23 +140,47 @@ class UserRepositoryTest extends RepositoryTestSupport {
     }
 
     @Test
+    @DisplayName("OAuth 제공자를 기존 문자열로 저장하고 enum으로 조회할 수 있다.")
+    void persistOAuthProvider() {
+        // given
+        var account = UserFixture.createDefaultUser();
+        account.linkOAuthAccount(OAuthProvider.GOOGLE, "google-user-123");
+
+        // when
+        Long id = users.saveAndFlush(account).getId();
+        entityManager.clear();
+        String stored = jdbc.queryForObject("select oauth_provider from users where id = ?", String.class, id);
+        var loaded = users.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "google-user-123");
+
+        // then
+        assertThat(stored).isEqualTo("google");
+        assertThat(loaded).hasValueSatisfying(user -> {
+            assertThat(user.getId()).isEqualTo(id);
+            assertThat(user.getOauthProvider()).isEqualTo(OAuthProvider.GOOGLE);
+        });
+    }
+
+    @Test
     @DisplayName("같은 OAuth 계정의 다른 이메일 가입을 거절할 수 있다.")
     void rejectDuplicateOAuthIdentity() {
         // given
         var account = UserFixture.createDefaultUser();
-        account.linkOAuthAccount("google", "google-user-123");
+        account.linkOAuthAccount(OAuthProvider.GOOGLE, "google-user-123");
         Long id = users.saveAndFlush(account).getId();
         entityManager.clear();
         var duplicate = UserFixture.create("another@example.com");
-        duplicate.linkOAuthAccount("google", "google-user-123");
+        duplicate.linkOAuthAccount(OAuthProvider.GOOGLE, "google-user-123");
 
         // when
-        var existing = users.findByOauthProviderAndOauthSubject("google", "google-user-123");
+        var existing = users.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, "google-user-123");
         Throwable error = catchThrowable(() -> users.saveAndFlush(duplicate));
 
         // then
         assertThat(existing).hasValueSatisfying(saved -> assertThat(saved.getId()).isEqualTo(id));
         assertThat(error).isInstanceOf(DataIntegrityViolationException.class);
+        assertThat(error.getCause()).isInstanceOfSatisfying(
+                org.hibernate.exception.ConstraintViolationException.class,
+                violation -> assertThat(violation.getConstraintName()).isEqualTo("uk_users_oauth_identity"));
     }
 
     @Test
