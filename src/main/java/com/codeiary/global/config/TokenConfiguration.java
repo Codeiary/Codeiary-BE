@@ -27,15 +27,16 @@ public class TokenConfiguration {
             new SecureRandom().nextBytes(bytes);
             secret = Base64.getEncoder().encodeToString(bytes);
         }
+        byte[] key;
         try {
-            byte[] key = Base64.getDecoder().decode(secret);
-            if (key.length < 32) {
-                throw new IllegalArgumentException();
-            }
-            return new SecretKeySpec(key, "HmacSHA256");
+            key = Base64.getDecoder().decode(secret);
         } catch (IllegalArgumentException exception) {
             throw new IllegalStateException(
                     "token.jwt.secret은 32바이트 이상 Base64 값이어야 합니다.", exception);
         }
+        if (key.length < 32) {
+            throw new IllegalStateException("token.jwt.secret은 32바이트 이상 Base64 값이어야 합니다.");
+        }
+        return new SecretKeySpec(key, "HmacSHA256");
     }
 }

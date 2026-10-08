@@ -2,10 +2,10 @@ package com.codeiary.global.config;
 
 import com.codeiary.global.security.handler.CustomOauth2FailureHandler;
 import com.codeiary.global.security.handler.CustomOauth2SuccessHandler;
-import com.codeiary.global.security.handler.SecurityErrorHandler;
+import com.codeiary.global.security.exception.SecurityErrorHandler;
 import com.codeiary.global.security.service.CustomOAuth2UserService;
 import com.codeiary.global.security.service.CustomOidcUserService;
-import com.codeiary.global.security.token.cookie.TokenAuthenticationFilter;
+import com.codeiary.global.security.filter.TokenAuthenticationFilter;
 import jakarta.servlet.DispatcherType;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;

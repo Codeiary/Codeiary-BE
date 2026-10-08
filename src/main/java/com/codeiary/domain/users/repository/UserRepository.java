@@ -1,6 +1,7 @@
 package com.codeiary.domain.users.repository;
 
 import com.codeiary.domain.users.entity.User;
+import com.codeiary.domain.users.entity.enums.OAuthProvider;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -12,7 +13,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
-    Optional<User> findByOauthProviderAndOauthSubject(String oauthProvider, String oauthSubject);
+    Optional<User> findByOauthProviderAndOauthSubject(OAuthProvider oauthProvider, String oauthSubject);
 
     Optional<User> findByNicknameIgnoreCase(String nickname);
 
