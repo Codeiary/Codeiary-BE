@@ -53,6 +53,8 @@ Swagger는 인증 없이 조회할 수 있습니다. 인증 API는 로그인 후
 | GET | `/api/posts/{postId}` | 게시글 단건 조회 | 200 + 본문 |
 | PUT | `/api/posts/{postId}` | 작성자 본인의 게시글 전체 수정 | 200 + 본문 |
 | DELETE | `/api/posts/{postId}` | 작성자 본인의 게시글 삭제 | 204 |
+| GET | `/api/posts` | 공개 게시글 목록 조회 | 200 + 페이지 응답 |
+| GET | `/api/posts/mine` | 내 게시글 목록 조회 | 200 + 페이지 응답 |
 
 생성과 수정은 같은 JSON 형식을 사용합니다. 제목(최대 200자), Markdown 본문,
 `publicPost`는 필수입니다. 카테고리(최대 100자), 대표 이미지 URL(최대 2048자)은
@@ -79,6 +81,14 @@ Swagger는 인증 없이 조회할 수 있습니다. 인증 API는 로그인 후
 포함합니다. 작성자의 로그인 이메일·OAuth 정보는 반환하지 않습니다.
 조회수는 저장된 값을 반환하며 단건 조회 자체로 증가시키지 않습니다. 조회수 집계 정책은 별도 작업입니다.
 대표 이미지는 기존 Presigned URL API로 업로드한 뒤 URL만 전달합니다.
+
+목록 API의 기본 페이지 크기는 12개이며 요청 크기는 최대 50개로 제한합니다.
+`page`는 0부터 시작하고, `sort`는 `LATEST`(기본값) 또는 `VIEWS`를 사용합니다.
+`search`는 제목·Markdown 본문을 검색하고, `category`는 정확히 일치하는 카테고리를 필터링합니다.
+공개 목록(`/api/posts`)에는 공개 글만 포함되며, 내 목록(`/api/posts/mine`)에는 본인의 공개·비공개 글이 모두 포함됩니다.
+내 목록은 항상 최신순으로 반환합니다. 응답은 `content`, `page`, `size`, `totalElements`,
+`totalPages`, `first`, `last`를 포함합니다. 목록 항목은 단건 응답의 본문을 제외한
+작성자·제목·카테고리·대표 이미지·공개 여부·조회수·시간 정보를 반환합니다.
 
 V3는 게시글 테이블을 생성하고, V4·V5를 거쳐 최종 테이블명은 `users`, `refresh_token`,
 `token_blacklist`, `blog_post`가 됩니다. V6는 사용자 중복 검사와 일치하도록
