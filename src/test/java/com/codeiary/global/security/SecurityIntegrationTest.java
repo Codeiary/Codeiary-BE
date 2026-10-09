@@ -1,9 +1,9 @@
 package com.codeiary.global.security;
 
-import com.codeiary.domain.users.entity.User;
-import com.codeiary.domain.users.entity.enums.Role;
-import com.codeiary.domain.users.fixture.UserFixture;
-import com.codeiary.domain.users.repository.UserRepository;
+import com.codeiary.domain.user.entity.User;
+import com.codeiary.domain.user.entity.enums.Role;
+import com.codeiary.domain.user.fixture.UserFixture;
+import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.provider.JwtTokenProvider;
 import com.codeiary.domain.auth.service.TokenSessionService;

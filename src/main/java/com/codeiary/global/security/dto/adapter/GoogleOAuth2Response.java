@@ -1,6 +1,6 @@
 package com.codeiary.global.security.dto.adapter;
 
-import com.codeiary.domain.users.entity.enums.OAuthProvider;
+import com.codeiary.domain.user.entity.enums.OAuthProvider;
 import com.codeiary.global.security.dto.OAuth2Response;
 import java.util.Locale;
 import java.util.Map;

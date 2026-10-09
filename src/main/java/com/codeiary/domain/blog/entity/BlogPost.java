@@ -1,6 +1,6 @@
 package com.codeiary.domain.blog.entity;
 
-import com.codeiary.domain.users.entity.User;
+import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.entity.TimeBaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;

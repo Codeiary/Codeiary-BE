@@ -1,6 +1,6 @@
 package com.codeiary.domain.auth.dto;
 
-import com.codeiary.domain.users.entity.enums.OAuthProvider;
+import com.codeiary.domain.user.entity.enums.OAuthProvider;
 
 public record AuthInfo(
         OAuthProvider provider,

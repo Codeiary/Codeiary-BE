@@ -1,6 +1,6 @@
 package com.codeiary.global.security.handler;
 
-import com.codeiary.domain.users.entity.User;
+import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.service.OAuthAccountService;
 import com.codeiary.domain.auth.dto.TokenPair;

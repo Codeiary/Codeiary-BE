@@ -1,7 +1,7 @@
 package com.codeiary.global.security.dto.adapter;
 
 import java.util.Map;
-import com.codeiary.domain.users.entity.enums.OAuthProvider;
+import com.codeiary.domain.user.entity.enums.OAuthProvider;
 
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;

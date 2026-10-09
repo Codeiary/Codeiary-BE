@@ -1,9 +1,9 @@
 package com.codeiary.global.security.filter;
 
 import com.codeiary.domain.auth.service.TokenSessionService;
-import com.codeiary.domain.users.entity.User;
-import com.codeiary.domain.users.entity.enums.Role;
-import com.codeiary.domain.users.fixture.UserFixture;
+import com.codeiary.domain.user.entity.User;
+import com.codeiary.domain.user.entity.enums.Role;
+import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.exception.TokenErrorCode;
 import com.codeiary.domain.auth.fixture.TokenFixture;
