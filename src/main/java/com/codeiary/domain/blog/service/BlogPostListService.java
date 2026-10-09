@@ -26,7 +26,7 @@ public class BlogPostListService {
 
     public BlogPostPageResponse getPublicPosts(String search, String category, BlogPostSort sort,
                                                int page, int size) {
-        Page<BlogPostListItemResponse> result = posts.findPublicPosts(normalize(search), normalize(category),
+        Page<BlogPostListItemResponse> result = posts.findPublicPosts(normalize(search), normalize(category), sort,
                         pageable(sort, page, size))
                 .map(postMapper::toListItemResponse);
         return toResponse(result);

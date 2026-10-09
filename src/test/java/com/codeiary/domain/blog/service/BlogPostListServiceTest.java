@@ -45,7 +45,7 @@ class BlogPostListServiceTest {
         // given
         BlogPost post = BlogPostFixture.createWithId(UserFixture.createWithId(Role.USER), true);
         BlogPostListItemResponse item = item(post);
-        given(posts.findPublicPosts(eq("spring"), eq("Java"), any(Pageable.class)))
+        given(posts.findPublicPosts(eq("spring"), eq("Java"), eq(BlogPostSort.LATEST), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(post), Pageable.ofSize(12), 25));
         given(postMapper.toListItemResponse(post)).willReturn(item);
 
@@ -84,14 +84,14 @@ class BlogPostListServiceTest {
     @DisplayName("조회순 정렬을 선택할 수 있다.")
     void sortByViews() {
         // given
-        given(posts.findPublicPosts(eq(null), eq(null), any(Pageable.class)))
+        given(posts.findPublicPosts(eq(null), eq(null), eq(BlogPostSort.VIEWS), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(), Pageable.ofSize(12), 0));
 
         // when
         service.getPublicPosts(null, null, BlogPostSort.VIEWS, 0, 12);
 
         // then
-        org.mockito.Mockito.verify(posts).findPublicPosts(any(), any(),
+        org.mockito.Mockito.verify(posts).findPublicPosts(any(), any(), eq(BlogPostSort.VIEWS),
                 org.mockito.ArgumentMatchers.argThat(pageable ->
                         pageable.getSort().getOrderFor("viewCount") != null));
     }
