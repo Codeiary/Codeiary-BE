@@ -1,6 +1,8 @@
 package com.codeiary.domain.blog.controller;
 
 import com.codeiary.domain.blog.fixture.BlogPostFixture;
+import com.codeiary.domain.blog.entity.BlogPost;
+import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.entity.enums.Role;
@@ -22,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -37,6 +40,7 @@ class BlogPostControllerTest extends IntegrationTestSupport {
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository users;
     @Autowired private BlogPostRepository posts;
+    @Autowired private CategoryRepository categories;
     @Autowired private JwtTokenProvider tokens;
 
     @Test
@@ -52,6 +56,8 @@ class BlogPostControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.author.id").value(author.getId()))
                 .andExpect(jsonPath("$.createdAt").isNotEmpty())
+                .andExpect(jsonPath("$.category").value("Java"))
+                .andExpect(jsonPath("$.tags").value(containsInAnyOrder("java", "spring")))
                 .andExpect(jsonPath("$.viewCount").value(0))
                 .andReturn().getResponse().getHeader("Location");
 
@@ -60,16 +66,18 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get(location))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("첫 기록"))
+                .andExpect(jsonPath("$.tags").value(containsInAnyOrder("java", "spring")))
                 .andExpect(jsonPath("$.author.email").doesNotExist())
                 .andExpect(jsonPath("$.author.role").doesNotExist());
         mockMvc.perform(put(location).cookie(cookie).contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"title":"수정 제목","content":"새 본문","publicPost":false}
+                                {"title":"수정 제목","content":"새 본문","category":"일상","publicPost":false}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("수정 제목"))
                 .andExpect(jsonPath("$.publicPost").value(false))
-                .andExpect(jsonPath("$.category").isEmpty());
+                .andExpect(jsonPath("$.tags").isEmpty())
+                .andExpect(jsonPath("$.category").value("일상"));
         mockMvc.perform(get(location).cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", containsString("no-store")));
@@ -83,7 +91,7 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         // given
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         User other = users.saveAndFlush(UserFixture.create("other@example.com"));
-        Long id = posts.saveAndFlush(BlogPostFixture.create(author, false)).getId();
+        Long id = persistPost(author, false);
         Cookie cookie = accessCookie(other);
 
         // when / then
@@ -120,16 +128,18 @@ class BlogPostControllerTest extends IntegrationTestSupport {
 
     @ParameterizedTest
     @ValueSource(strings = {
-            "{\"title\":\" \",\"content\":\"본문\",\"publicPost\":true}",
-            "{\"title\":\"제목\",\"content\":\" \",\"publicPost\":true}",
-            "{\"title\":\"제목\",\"content\":\"본문\"}"
+            "{\"title\":\" \",\"content\":\"본문\",\"category\":\"Java\",\"publicPost\":true}",
+            "{\"title\":\"제목\",\"content\":\" \",\"category\":\"Java\",\"publicPost\":true}",
+            "{\"title\":\"제목\",\"content\":\"본문\",\"category\":\"Java\"}",
+            "{\"title\":\"제목\",\"content\":\"본문\",\"publicPost\":true}",
+            "{\"title\":\"제목\",\"content\":\"본문\",\"category\":\" \",\"publicPost\":true}"
     })
     @DisplayName("필수 입력이 누락된 생성·수정 요청을 거절할 수 있다.")
     void rejectInvalidBody(String body) throws Exception {
         // given
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         Cookie cookie = accessCookie(author);
-        Long id = posts.saveAndFlush(BlogPostFixture.create(author, true)).getId();
+        Long id = persistPost(author, true);
 
         // when / then
         mockMvc.perform(post("/api/posts").cookie(cookie).contentType(MediaType.APPLICATION_JSON).content(body))
@@ -139,6 +149,56 @@ class BlogPostControllerTest extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
         assertThat(posts.findById(id).orElseThrow().getTitle()).isEqualTo("첫 기록");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "[\" \" ]", "[null]", "[\"1234567890123456789012345678901\"]",
+            "[\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\",\"10\",\"11\"]"
+    })
+    @DisplayName("비어 있거나 길이·개수 제한을 넘는 태그를 거절할 수 있다.")
+    void rejectInvalidTags(String tags) throws Exception {
+        // given
+        var author = users.saveAndFlush(UserFixture.create(Role.USER));
+        String body = """
+                {"title":"제목","content":"본문","category":"Java","tags":%s,"publicPost":true}
+                """.formatted(tags);
+
+        // when / then
+        mockMvc.perform(post("/api/posts").cookie(accessCookie(author))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
+        assertThat(posts.count()).isZero();
+    }
+
+    @Test
+    @DisplayName("공개 글과 내 글 목록을 카테고리와 태그로 검색할 수 있다.")
+    void filterPostLists() throws Exception {
+        // given
+        var author = users.saveAndFlush(UserFixture.create(Role.USER));
+        var cookie = accessCookie(author);
+        mockMvc.perform(post("/api/posts").cookie(cookie)
+                        .contentType(MediaType.APPLICATION_JSON).content(BlogPostFixture.REQUEST_JSON))
+                .andExpect(status().isCreated());
+
+        // when / then
+        for (String path : new String[]{"/api/posts", "/api/posts/mine"}) {
+            mockMvc.perform(get(path).cookie(cookie).param("category", "Java").param("tag", "SPRING"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalElements").value(1))
+                    .andExpect(jsonPath("$.content[0].category").value("Java"))
+                    .andExpect(jsonPath("$.content[0].tags").value(containsInAnyOrder("java", "spring")));
+            mockMvc.perform(get(path).cookie(cookie).param("tag", "vue"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content").isEmpty());
+        }
+    }
+
+    private Long persistPost(User author, boolean publicPost) {
+        BlogPost post = BlogPostFixture.create(author, publicPost);
+        categories.saveAndFlush(post.getCategory());
+        return posts.saveAndFlush(post).getId();
     }
 
     private Cookie accessCookie(User user) {

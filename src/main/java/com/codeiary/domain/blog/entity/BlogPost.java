@@ -2,6 +2,7 @@ package com.codeiary.domain.blog.entity;
 
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.entity.TimeBaseEntity;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -10,8 +11,13 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -37,8 +43,13 @@ public class BlogPost extends TimeBaseEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
-    @Column(length = 100)
-    private String category;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id", nullable = false)
+    private Category category;
+
+    @OneToMany(mappedBy = "post", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("id ASC")
+    private List<BlogPostTag> postTags = new ArrayList<>();
 
     @Column(name = "representative_image_url", length = 2048)
     private String representativeImageUrl;
@@ -50,17 +61,17 @@ public class BlogPost extends TimeBaseEntity {
     private long viewCount;
 
     @Builder(access = AccessLevel.PRIVATE)
-    private BlogPost(User author, String title, String content, String category,
+    private BlogPost(User author, String title, String content, Category category,
                      String representativeImageUrl, boolean publicPost) {
         this.author = Objects.requireNonNull(author);
         this.title = Objects.requireNonNull(title);
         this.content = Objects.requireNonNull(content);
-        this.category = category;
+        this.category = Objects.requireNonNull(category);
         this.representativeImageUrl = representativeImageUrl;
         this.publicPost = publicPost;
     }
 
-    public static BlogPost create(User author, String title, String content, String category,
+    public static BlogPost create(User author, String title, String content, Category category,
                                   String representativeImageUrl, boolean publicPost) {
         return BlogPost.builder()
                 .author(author)
@@ -72,17 +83,33 @@ public class BlogPost extends TimeBaseEntity {
                 .build();
     }
 
-    public void update(String title, String content, String category,
+    public void update(String title, String content, Category category,
                        String representativeImageUrl, boolean publicPost) {
         this.title = Objects.requireNonNull(title);
         this.content = Objects.requireNonNull(content);
-        this.category = category;
+        this.category = Objects.requireNonNull(category);
         this.representativeImageUrl = representativeImageUrl;
         this.publicPost = publicPost;
     }
 
     public void increaseViewCount() {
         viewCount++;
+    }
+
+    public void replaceTags(List<Tag> tags) {
+        var names = tags.stream().map(Tag::getName).collect(Collectors.toSet());
+        boolean changed = postTags.removeIf(link -> !names.contains(link.getTag().getName()));
+        var existing = postTags.stream().map(link -> link.getTag().getName())
+                .collect(Collectors.toSet());
+        for (Tag tag : tags) {
+            if (existing.add(tag.getName())) {
+                postTags.add(BlogPostTag.create(this, tag));
+                changed = true;
+            }
+        }
+        if (changed) {
+            markModified();
+        }
     }
 
     public boolean isWrittenBy(User user) {

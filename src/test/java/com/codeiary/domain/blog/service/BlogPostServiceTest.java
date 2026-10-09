@@ -4,6 +4,11 @@ import com.codeiary.domain.blog.dto.BlogPostMapper;
 import com.codeiary.domain.blog.dto.request.BlogPostRequest;
 import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.entity.BlogPost;
+import com.codeiary.domain.blog.entity.Category;
+import com.codeiary.domain.blog.entity.Tag;
+import com.codeiary.domain.blog.repository.CategoryRepository;
+import com.codeiary.domain.blog.repository.TagRepository;
+import java.util.List;
 import com.codeiary.domain.blog.exception.BlogErrorCode;
 import com.codeiary.domain.blog.fixture.BlogPostFixture;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
@@ -38,11 +43,13 @@ class BlogPostServiceTest {
 
     @Mock private BlogPostRepository posts;
     @Mock private ImageUrlValidator imageUrls;
+    @Mock private CategoryRepository categories;
+    @Mock private TagRepository tags;
     private BlogPostService service;
 
     @BeforeEach
     void setUp() {
-        service = new BlogPostService(posts, Mappers.getMapper(BlogPostMapper.class), imageUrls);
+        service = new BlogPostService(posts, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags);
     }
 
     @Test
@@ -51,6 +58,10 @@ class BlogPostServiceTest {
         // given
         User user = UserFixture.createWithId(Role.USER);
         user.updateProfile("기록자", "https://img.example.com/avatar.jpg");
+        given(categories.findByAuthorIdAndName(user.getId(), "Java"))
+                .willReturn(Category.create(user, "Java"));
+        given(tags.findByNameInOrderByNameAsc(List.of("java", "spring")))
+                .willReturn(List.of(Tag.create("java"), Tag.create("spring")));
         given(posts.save(any(BlogPost.class))).willAnswer(invocation -> invocation.getArgument(0));
 
         // when
@@ -60,6 +71,9 @@ class BlogPostServiceTest {
         assertThat(response.title()).isEqualTo("첫 기록");
         assertThat(response.content()).isEqualTo(BlogPostFixture.CONTENT);
         assertThat(response.category()).isEqualTo("Java");
+        assertThat(response.tags()).containsExactly("java", "spring");
+        then(tags).should().insertIfAbsent("java");
+        then(tags).should().insertIfAbsent("spring");
         assertThat(response.representativeImageUrl()).isNull();
         assertThat(response.author().id()).isEqualTo(user.getId());
         assertThat(response.author().nickname()).isEqualTo("기록자");
@@ -106,7 +120,7 @@ class BlogPostServiceTest {
         // given
         User user = UserFixture.createWithId();
         BlogPost post = BlogPostFixture.createWithId(user, true);
-        var request = new BlogPostRequest("수정", "수정 내용", null, "javascript:alert(1)", false);
+        var request = new BlogPostRequest("수정", "수정 내용", "Java", List.of(), "javascript:alert(1)", false);
         given(posts.findById(BlogPostFixture.ID)).willReturn(Optional.of(post));
         willThrow(new RestApiException(CommonErrorCode.INVALID_PARAMETER))
                 .given(imageUrls).validate(request.representativeImageUrl());

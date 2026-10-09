@@ -45,12 +45,12 @@ class BlogPostListServiceTest {
         // given
         BlogPost post = BlogPostFixture.createWithId(UserFixture.createWithId(Role.USER), true);
         BlogPostListItemResponse item = item(post);
-        given(posts.findPublicPosts(eq("spring"), eq("Java"), eq(BlogPostSort.LATEST), any(Pageable.class)))
+        given(posts.findPublicPosts(eq("spring"), eq("Java"), eq(null), eq(BlogPostSort.LATEST), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(post), Pageable.ofSize(12), 25));
         given(postMapper.toListItemResponse(post)).willReturn(item);
 
         // when
-        BlogPostPageResponse response = service.getPublicPosts(" spring ", " Java ", BlogPostSort.LATEST, 1, 12);
+        BlogPostPageResponse response = service.getPublicPosts(" spring ", " Java ", null, BlogPostSort.LATEST, 1, 12);
 
         // then
         assertThat(response.content()).containsExactly(item);
@@ -67,12 +67,12 @@ class BlogPostListServiceTest {
         User author = UserFixture.createWithId(Role.USER);
         BlogPost post = BlogPostFixture.createWithId(author, false);
         BlogPostListItemResponse item = item(post);
-        given(posts.findAuthorPosts(eq(author.getId()), eq(null), eq(null), any(Pageable.class)))
+        given(posts.findAuthorPosts(eq(author.getId()), eq(null), eq(null), eq(null), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(post), Pageable.ofSize(12), 1));
         given(postMapper.toListItemResponse(post)).willReturn(item);
 
         // when
-        BlogPostPageResponse response = service.getMyPosts(author, "", "", 0, 100);
+        BlogPostPageResponse response = service.getMyPosts(author, "", "", null, 0, 100);
 
         // then
         assertThat(response.content()).containsExactly(item);
@@ -84,14 +84,14 @@ class BlogPostListServiceTest {
     @DisplayName("조회순 정렬을 선택할 수 있다.")
     void sortByViews() {
         // given
-        given(posts.findPublicPosts(eq(null), eq(null), eq(BlogPostSort.VIEWS), any(Pageable.class)))
+        given(posts.findPublicPosts(eq(null), eq(null), eq(null), eq(BlogPostSort.VIEWS), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(), Pageable.ofSize(12), 0));
 
         // when
-        service.getPublicPosts(null, null, BlogPostSort.VIEWS, 0, 12);
+        service.getPublicPosts(null, null, null, BlogPostSort.VIEWS, 0, 12);
 
         // then
-        org.mockito.Mockito.verify(posts).findPublicPosts(any(), any(), eq(BlogPostSort.VIEWS),
+        org.mockito.Mockito.verify(posts).findPublicPosts(any(), any(), any(), eq(BlogPostSort.VIEWS),
                 org.mockito.ArgumentMatchers.argThat(pageable ->
                         pageable.getSort().getOrderFor("viewCount") != null));
     }
@@ -99,7 +99,7 @@ class BlogPostListServiceTest {
     private BlogPostListItemResponse item(BlogPost post) {
         return new BlogPostListItemResponse(post.getId(),
                 new BlogAuthorResponse(post.getAuthor().getId(), post.getAuthor().getNickname(), null),
-                post.getTitle(), post.getCategory(), post.getRepresentativeImageUrl(),
+                post.getTitle(), post.getCategory().getName(), List.of(), post.getRepresentativeImageUrl(),
                 post.isPublicPost(), post.getViewCount(), LocalDateTime.now(), LocalDateTime.now());
     }
 }

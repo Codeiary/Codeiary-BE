@@ -35,15 +35,16 @@ public class BlogPostController {
     private final BlogPostListService postListService;
 
     @GetMapping
-    @Operation(summary = "공개 게시글 목록 조회", description = "검색·카테고리 필터와 최신순·조회순 정렬을 지원합니다.")
+    @Operation(summary = "공개 게시글 목록 조회", description = "검색·카테고리·태그 필터와 최신순·조회순 정렬을 지원합니다.")
     public BlogPostPageResponse list(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String tag,
             @RequestParam(defaultValue = "LATEST") BlogPostSort sort,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size
     ) {
-        return postListService.getPublicPosts(search, category, sort, page, size);
+        return postListService.getPublicPosts(search, category, tag, sort, page, size);
     }
 
     @GetMapping("/mine")
@@ -53,10 +54,11 @@ public class BlogPostController {
             @AuthenticationPrincipal User user,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String tag,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size
     ) {
-        return postListService.getMyPosts(user, search, category, page, size);
+        return postListService.getMyPosts(user, search, category, tag, page, size);
     }
 
     @PostMapping
