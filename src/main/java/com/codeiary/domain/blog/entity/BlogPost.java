@@ -84,4 +84,8 @@ public class BlogPost extends TimeBaseEntity {
     public void increaseViewCount() {
         viewCount++;
     }
+
+    public boolean isWrittenBy(User user) {
+        return user != null && author.getId().equals(user.getId());
+    }
 }
