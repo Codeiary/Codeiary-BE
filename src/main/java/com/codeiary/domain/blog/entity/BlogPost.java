@@ -18,7 +18,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "blog_posts")
+@Table(name = "blog_post")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BlogPost extends TimeBaseEntity {
