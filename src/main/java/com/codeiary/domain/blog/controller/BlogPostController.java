@@ -1,8 +1,11 @@
 package com.codeiary.domain.blog.controller;
 
 import com.codeiary.domain.blog.dto.request.BlogPostRequest;
+import com.codeiary.domain.blog.dto.request.BlogPostSort;
+import com.codeiary.domain.blog.dto.response.BlogPostPageResponse;
 import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.service.BlogPostService;
+import com.codeiary.domain.blog.service.BlogPostListService;
 import com.codeiary.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -28,6 +32,32 @@ import org.springframework.web.bind.annotation.RestController;
 public class BlogPostController {
 
     private final BlogPostService postService;
+    private final BlogPostListService postListService;
+
+    @GetMapping
+    @Operation(summary = "공개 게시글 목록 조회", description = "검색·카테고리 필터와 최신순·조회순 정렬을 지원합니다.")
+    public BlogPostPageResponse list(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "LATEST") BlogPostSort sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size
+    ) {
+        return postListService.getPublicPosts(search, category, sort, page, size);
+    }
+
+    @GetMapping("/mine")
+    @SecurityRequirement(name = "cookieAuth")
+    @Operation(summary = "내 게시글 목록 조회", description = "공개·비공개 글을 최신순으로 조회합니다.")
+    public BlogPostPageResponse mine(
+            @AuthenticationPrincipal User user,
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String category,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size
+    ) {
+        return postListService.getMyPosts(user, search, category, page, size);
+    }
 
     @PostMapping
     @SecurityRequirement(name = "cookieAuth")
