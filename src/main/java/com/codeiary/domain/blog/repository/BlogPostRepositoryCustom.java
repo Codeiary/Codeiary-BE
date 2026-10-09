@@ -7,7 +7,7 @@ import org.springframework.data.domain.Pageable;
 
 public interface BlogPostRepositoryCustom {
 
-    Page<BlogPost> findPublicPosts(String search, String category, BlogPostSort sort, Pageable pageable);
+    Page<BlogPost> findPublicPosts(String search, String category, String tag, BlogPostSort sort, Pageable pageable);
 
-    Page<BlogPost> findAuthorPosts(Long authorId, String search, String category, Pageable pageable);
+    Page<BlogPost> findAuthorPosts(Long authorId, String search, String category, String tag, Pageable pageable);
 }

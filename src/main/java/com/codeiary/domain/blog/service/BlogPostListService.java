@@ -6,7 +6,6 @@ import com.codeiary.domain.blog.dto.response.BlogPostListItemResponse;
 import com.codeiary.domain.blog.dto.response.BlogPostPageResponse;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.user.entity.User;
-import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -24,17 +23,17 @@ public class BlogPostListService {
     private final BlogPostRepository posts;
     private final BlogPostMapper postMapper;
 
-    public BlogPostPageResponse getPublicPosts(String search, String category, BlogPostSort sort,
+    public BlogPostPageResponse getPublicPosts(String search, String category, String tag, BlogPostSort sort,
                                                int page, int size) {
-        Page<BlogPostListItemResponse> result = posts.findPublicPosts(normalize(search), normalize(category), sort,
-                        pageable(sort, page, size))
+        Page<BlogPostListItemResponse> result = posts.findPublicPosts(normalize(search), normalize(category),
+                        normalize(tag), sort, pageable(sort, page, size))
                 .map(postMapper::toListItemResponse);
         return toResponse(result);
     }
 
-    public BlogPostPageResponse getMyPosts(User user, String search, String category, int page, int size) {
+    public BlogPostPageResponse getMyPosts(User user, String search, String category, String tag, int page, int size) {
         Page<BlogPostListItemResponse> result = posts.findAuthorPosts(user.getId(), normalize(search),
-                        normalize(category), pageable(BlogPostSort.LATEST, page, size))
+                        normalize(category), normalize(tag), pageable(BlogPostSort.LATEST, page, size))
                 .map(postMapper::toListItemResponse);
         return toResponse(result);
     }
