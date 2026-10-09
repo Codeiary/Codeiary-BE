@@ -52,6 +52,7 @@ public class SecurityConfig {
                                 "/api/auth/reissue", "/api/auth/refresh", "/api/auth/logout").permitAll()
                         .requestMatchers("/api/admin", "/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/users/me", "/api/users/nickname-availability").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/posts/mine").authenticated()
                         .requestMatchers(HttpMethod.POST, "/api/users/me/onboarding").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
                         .anyRequest().hasAnyRole("USER", "ADMIN"))
