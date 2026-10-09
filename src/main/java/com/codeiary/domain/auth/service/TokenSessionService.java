@@ -1,7 +1,7 @@
 package com.codeiary.domain.auth.service;
 
-import com.codeiary.domain.users.entity.User;
-import com.codeiary.domain.users.repository.UserRepository;
+import com.codeiary.domain.user.entity.User;
+import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.entity.RefreshToken;

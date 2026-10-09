@@ -1,7 +1,7 @@
 package com.codeiary.global.security.filter;
 
 import com.codeiary.domain.auth.service.TokenSessionService;
-import com.codeiary.domain.users.entity.User;
+import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.cookie.TokenCookieManager;
 import jakarta.servlet.FilterChain;

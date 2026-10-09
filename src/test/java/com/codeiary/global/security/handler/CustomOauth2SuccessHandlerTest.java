@@ -1,9 +1,9 @@
 package com.codeiary.global.security.handler;
 
-import com.codeiary.domain.users.entity.enums.OAuthProvider;
-import com.codeiary.domain.users.entity.User;
-import com.codeiary.domain.users.exception.UserErrorCode;
-import com.codeiary.domain.users.fixture.UserFixture;
+import com.codeiary.domain.user.entity.enums.OAuthProvider;
+import com.codeiary.domain.user.entity.User;
+import com.codeiary.domain.user.exception.UserErrorCode;
+import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.dto.AuthInfo;
 import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;

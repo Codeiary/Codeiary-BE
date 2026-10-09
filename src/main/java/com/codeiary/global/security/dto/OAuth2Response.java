@@ -1,6 +1,6 @@
 package com.codeiary.global.security.dto;
 
-import com.codeiary.domain.users.entity.enums.OAuthProvider;
+import com.codeiary.domain.user.entity.enums.OAuthProvider;
 
 public interface OAuth2Response {
 

@@ -45,6 +45,46 @@ springdoc-openapi 3.1.1로 Swagger UI를 제공합니다. 서버 실행 후:
 Swagger는 인증 없이 조회할 수 있습니다. 인증 API는 로그인 후 브라우저에 설정된
 `access_token` 쿠키를 사용하며, OpenAPI에는 `cookieAuth`로 표시합니다.
 
+## 게시글 API
+
+| 메서드 | 경로 | 동작 | 성공 응답 |
+| --- | --- | --- | --- |
+| POST | `/api/posts` | 로그인한 사용자의 게시글 생성 | 201 + 본문, Location |
+| GET | `/api/posts/{postId}` | 게시글 단건 조회 | 200 + 본문 |
+| PUT | `/api/posts/{postId}` | 작성자 본인의 게시글 전체 수정 | 200 + 본문 |
+| DELETE | `/api/posts/{postId}` | 작성자 본인의 게시글 삭제 | 204 |
+
+생성과 수정은 같은 JSON 형식을 사용합니다. 제목(최대 200자), Markdown 본문,
+`publicPost`는 필수입니다. 카테고리(최대 100자), 대표 이미지 URL(최대 2048자)은
+선택이며, 수정 시 생략하거나 비우면 삭제됩니다. 본문의 줄바꿈과 공백은 그대로 저장합니다.
+
+```json
+{
+  "title": "Spring 트랜잭션 정리",
+  "content": "# 트랜잭션\n\n학습한 내용을 기록합니다.",
+  "category": "Spring",
+  "representativeImageUrl": "https://img.codeiary.com/images/1/example.jpg",
+  "publicPost": true
+}
+```
+
+작성자는 요청한 인증 사용자를 기준으로 지정합니다. `USER`·`ADMIN`은 생성할 수 있고,
+관리자를 포함해 다른 작성자의 글은 수정·삭제할 수 없습니다. 익명 변경 요청은 401,
+온보딩 전 계정의 변경 요청과 타인의 공개 글 변경 요청은 403입니다.
+공개 글은 로그인 없이 조회할 수 있고, 비공개 글은 작성자에게만 보입니다.
+존재하지 않거나 접근할 수 없는 비공개 글은 `404 / POST_NOT_FOUND`로 응답합니다.
+
+응답은 `id`, `author`(`id`, `nickname`, `profileImageUrl`), `title`, `content`,
+`category`, `representativeImageUrl`, `publicPost`, `viewCount`, `createdAt`, `updatedAt`을
+포함합니다. 작성자의 로그인 이메일·OAuth 정보는 반환하지 않습니다.
+조회수는 저장된 값을 반환하며 단건 조회 자체로 증가시키지 않습니다. 조회수 집계 정책은 별도 작업입니다.
+대표 이미지는 기존 Presigned URL API로 업로드한 뒤 URL만 전달합니다.
+
+V3는 게시글 테이블을 생성하고, V4·V5를 거쳐 최종 테이블명은 `users`, `refresh_token`,
+`token_blacklist`, `blog_post`가 됩니다. V6는 사용자 중복 검사와 일치하도록
+`uk_users_nickname`, `uk_users_oauth_identity` 인덱스명을 복원합니다.
+이미 적용된 마이그레이션을 수정하거나 기존 데이터를 초기화할 필요는 없습니다.
+
 ## OAuth2 로그인과 JWT 쿠키
 
 기존 이메일·비밀번호 로그인 API 대신 Google OAuth2/OIDC 로그인을 사용합니다.
