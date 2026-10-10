@@ -11,8 +11,13 @@ public record BlogPostListItemResponse(
         List<String> tags,
         String representativeImageUrl,
         boolean publicPost,
-        long viewCount,
+        long likeCount,
+        boolean likedByMe,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
+    public BlogPostListItemResponse withLikes(long count, boolean liked) {
+        return new BlogPostListItemResponse(id, author, title, category, tags, representativeImageUrl,
+                publicPost, count, liked, createdAt, updatedAt);
+    }
 }

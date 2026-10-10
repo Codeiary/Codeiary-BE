@@ -27,6 +27,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BlogPostRepositoryTest extends RepositoryTestSupport {
 
     @Autowired private BlogPostRepository posts;
+    @Autowired private PostLikeRepository postLikes;
     @Autowired private CategoryRepository categories;
     @Autowired private TagRepository tags;
     @Autowired private UserRepository users;
@@ -66,11 +67,31 @@ class BlogPostRepositoryTest extends RepositoryTestSupport {
         assertThat(saved.getContent()).isEqualTo("수정 본문");
         assertThat(saved.getCategory().getName()).isEqualTo("Java");
         assertThat(saved.isPublicPost()).isFalse();
-        assertThat(saved.getViewCount()).isZero();
         assertThat(saved.getRepresentativeImageUrl()).isEqualTo("https://img.example.com/cover.jpg");
         assertThat(saved.getAuthor().getNickname()).isEqualTo("기록자");
         assertThat(saved.getCreatedAt()).isEqualTo(now);
         assertThat(saved.getUpdatedAt()).isEqualTo(now.plusMinutes(5));
+    }
+
+    @Test
+    @DisplayName("좋아요가 많은 공개 글을 먼저 조회할 수 있다.")
+    void sortByLikes() {
+        // given
+        var author = users.saveAndFlush(UserFixture.create());
+        var reader = users.saveAndFlush(UserFixture.create("reader@example.com"));
+        var popular = BlogPostFixture.create(author, true);
+        var recent = BlogPostFixture.create(author, true);
+        categories.saveAndFlush(popular.getCategory());
+        recent.update(recent.getTitle(), recent.getContent(), popular.getCategory(), null, true);
+        posts.saveAndFlush(popular);
+        posts.saveAndFlush(recent);
+        postLikes.addLike(popular.getId(), reader.getId());
+
+        // when
+        var page = posts.findPublicPosts(null, null, null, BlogPostSort.LIKES, PageRequest.of(0, 10));
+
+        // then
+        assertThat(page.getContent()).extracting(BlogPost::getId).containsExactly(popular.getId(), recent.getId());
     }
 
     @Test

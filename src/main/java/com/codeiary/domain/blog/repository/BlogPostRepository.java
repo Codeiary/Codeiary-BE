@@ -7,6 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface BlogPostRepository extends JpaRepository<BlogPost, Long>, BlogPostRepositoryCustom {
 
+    boolean existsByIdAndPublicPostTrue(Long id);
+
     @Override
     @EntityGraph(attributePaths = {"author", "category", "postTags.tag"})
     Optional<BlogPost> findById(Long id);

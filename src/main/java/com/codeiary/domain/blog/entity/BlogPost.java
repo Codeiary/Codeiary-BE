@@ -57,9 +57,6 @@ public class BlogPost extends TimeBaseEntity {
     @Column(name = "is_public", nullable = false)
     private boolean publicPost;
 
-    @Column(nullable = false)
-    private long viewCount;
-
     @Builder(access = AccessLevel.PRIVATE)
     private BlogPost(User author, String title, String content, Category category,
                      String representativeImageUrl, boolean publicPost) {
@@ -90,10 +87,7 @@ public class BlogPost extends TimeBaseEntity {
         this.category = Objects.requireNonNull(category);
         this.representativeImageUrl = representativeImageUrl;
         this.publicPost = publicPost;
-    }
-
-    public void increaseViewCount() {
-        viewCount++;
+        markModified();
     }
 
     public void replaceTags(List<Tag> tags) {
