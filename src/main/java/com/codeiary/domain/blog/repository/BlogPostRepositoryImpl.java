@@ -9,6 +9,7 @@ import com.codeiary.domain.blog.entity.QTag;
 import com.codeiary.domain.user.entity.QUser;
 import com.querydsl.core.BooleanBuilder;
 import com.querydsl.core.types.OrderSpecifier;
+import com.querydsl.core.types.dsl.Expressions;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import java.util.List;
 import java.util.Locale;
@@ -50,8 +51,6 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
                 .limit(pageable.getPageSize())
                 .fetch();
         if (!content.isEmpty()) {
-            // Fetch the collection only after paging posts; a collection fetch join with LIMIT
-            // would duplicate rows or move pagination into memory.
             QBlogPostTag postTag = QBlogPostTag.blogPostTag;
             queries.selectFrom(post)
                     .leftJoin(post.postTags, postTag).fetchJoin()
@@ -82,8 +81,10 @@ public class BlogPostRepositoryImpl implements BlogPostRepositoryCustom {
     }
 
     private OrderSpecifier<?>[] ordering(BlogPostSort sort) {
-        OrderSpecifier<?> primary = sort == BlogPostSort.VIEWS
-                ? post.viewCount.desc() : post.createdAt.desc();
-        return new OrderSpecifier<?>[]{primary, post.createdAt.desc(), post.id.desc()};
+        return sort == BlogPostSort.LIKES
+                ? new OrderSpecifier<?>[]{Expressions.numberTemplate(Long.class,
+                        "(select count(pl) from PostLike pl where pl.post.id = {0})", post.id).desc(),
+                        post.createdAt.desc(), post.id.desc()}
+                : new OrderSpecifier<?>[]{post.createdAt.desc(), post.id.desc()};
     }
 }

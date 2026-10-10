@@ -8,6 +8,7 @@ import com.codeiary.domain.blog.entity.Category;
 import com.codeiary.domain.blog.entity.Tag;
 import com.codeiary.domain.blog.exception.BlogErrorCode;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
+import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.TagRepository;
 import com.codeiary.domain.image.validation.ImageUrlValidator;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class BlogPostService {
 
     private final BlogPostRepository posts;
+    private final PostLikeRepository postLikes;
     private final BlogPostMapper postMapper;
     private final ImageUrlValidator imageUrls;
     private final CategoryRepository categories;
@@ -44,7 +46,8 @@ public class BlogPostService {
         if (!post.isPublicPost() && !post.isWrittenBy(user)) {
             throw new RestApiException(BlogErrorCode.POST_NOT_FOUND);
         }
-        return postMapper.toResponse(post);
+        boolean likedByMe = user != null && postLikes.existsForUser(postId, user.getId());
+        return postMapper.toResponse(post).withLikes(postLikes.countForPost(postId), likedByMe);
     }
 
     @Transactional
@@ -56,7 +59,6 @@ public class BlogPostService {
         post.update(normalized.title(), normalized.content(), category,
                 normalized.representativeImageUrl(), normalized.publicPost());
         post.replaceTags(resolvedTags);
-        posts.flush();
         return postMapper.toResponse(post);
     }
 

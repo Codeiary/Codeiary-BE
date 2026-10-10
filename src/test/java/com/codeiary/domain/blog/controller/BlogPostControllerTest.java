@@ -4,6 +4,7 @@ import com.codeiary.domain.blog.fixture.BlogPostFixture;
 import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
+import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.entity.enums.Role;
 import com.codeiary.domain.user.fixture.UserFixture;
@@ -40,6 +41,7 @@ class BlogPostControllerTest extends IntegrationTestSupport {
     @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository users;
     @Autowired private BlogPostRepository posts;
+    @Autowired private PostLikeRepository postLikes;
     @Autowired private CategoryRepository categories;
     @Autowired private JwtTokenProvider tokens;
 
@@ -58,7 +60,8 @@ class BlogPostControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.createdAt").isNotEmpty())
                 .andExpect(jsonPath("$.category").value("Java"))
                 .andExpect(jsonPath("$.tags").value(containsInAnyOrder("java", "spring")))
-                .andExpect(jsonPath("$.viewCount").value(0))
+                .andExpect(jsonPath("$.likeCount").value(0))
+                .andExpect(jsonPath("$.likedByMe").value(false))
                 .andReturn().getResponse().getHeader("Location");
 
         // then
@@ -66,6 +69,8 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         mockMvc.perform(get(location))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("첫 기록"))
+                .andExpect(jsonPath("$.likeCount").value(0))
+                .andExpect(jsonPath("$.likedByMe").value(false))
                 .andExpect(jsonPath("$.tags").value(containsInAnyOrder("java", "spring")))
                 .andExpect(jsonPath("$.author.email").doesNotExist())
                 .andExpect(jsonPath("$.author.role").doesNotExist());
@@ -104,6 +109,37 @@ class BlogPostControllerTest extends IntegrationTestSupport {
                 .andExpect(status().isNotFound());
         mockMvc.perform(delete("/api/posts/{id}", id).cookie(cookie)).andExpect(status().isNotFound());
         assertThat(posts.existsById(id)).isTrue();
+    }
+
+    @Test
+    @DisplayName("로그인 사용자는 게시글에 한 번 좋아요를 누르고 취소할 수 있다.")
+    void likePostOnceAndUnlike() throws Exception {
+        // given
+        User author = users.saveAndFlush(UserFixture.create(Role.USER));
+        User reader = users.saveAndFlush(UserFixture.create("reader@example.com"));
+        Long postId = persistPost(author, true);
+        Cookie cookie = accessCookie(reader);
+
+        // when / then
+        mockMvc.perform(post("/api/posts/{id}/likes", postId))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/api/posts/{id}/likes", postId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(1))
+                .andExpect(jsonPath("$.likedByMe").value(true));
+        mockMvc.perform(post("/api/posts/{id}/likes", postId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(1));
+        assertThat(postLikes.countForPost(postId)).isEqualTo(1);
+        mockMvc.perform(get("/api/posts/{id}", postId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(1))
+                .andExpect(jsonPath("$.likedByMe").value(true));
+        mockMvc.perform(delete("/api/posts/{id}/likes", postId).cookie(cookie))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.likeCount").value(0))
+                .andExpect(jsonPath("$.likedByMe").value(false));
+        assertThat(postLikes.countForPost(postId)).isZero();
     }
 
     @Test

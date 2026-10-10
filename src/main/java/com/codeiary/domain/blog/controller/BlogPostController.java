@@ -4,8 +4,10 @@ import com.codeiary.domain.blog.dto.request.BlogPostRequest;
 import com.codeiary.domain.blog.dto.request.BlogPostSort;
 import com.codeiary.domain.blog.dto.response.BlogPostPageResponse;
 import com.codeiary.domain.blog.dto.response.BlogPostResponse;
+import com.codeiary.domain.blog.dto.response.PostLikeResponse;
 import com.codeiary.domain.blog.service.BlogPostService;
 import com.codeiary.domain.blog.service.BlogPostListService;
+import com.codeiary.domain.blog.service.PostLikeService;
 import com.codeiary.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -33,10 +35,12 @@ public class BlogPostController {
 
     private final BlogPostService postService;
     private final BlogPostListService postListService;
+    private final PostLikeService postLikeService;
 
     @GetMapping
-    @Operation(summary = "공개 게시글 목록 조회", description = "검색·카테고리·태그 필터와 최신순·조회순 정렬을 지원합니다.")
+    @Operation(summary = "공개 게시글 목록 조회", description = "검색·카테고리·태그 필터와 최신순·좋아요순 정렬을 지원합니다.")
     public BlogPostPageResponse list(
+            @AuthenticationPrincipal User user,
             @RequestParam(required = false) String search,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String tag,
@@ -44,7 +48,7 @@ public class BlogPostController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size
     ) {
-        return postListService.getPublicPosts(search, category, tag, sort, page, size);
+        return postListService.getPublicPosts(search, category, tag, sort, page, size, user);
     }
 
     @GetMapping("/mine")
@@ -95,5 +99,19 @@ public class BlogPostController {
     public ResponseEntity<Void> delete(@PathVariable Long postId, @AuthenticationPrincipal User user) {
         postService.delete(postId, user);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{postId}/likes")
+    @SecurityRequirement(name = "cookieAuth")
+    @Operation(summary = "게시글 좋아요")
+    public PostLikeResponse like(@PathVariable Long postId, @AuthenticationPrincipal User user) {
+        return postLikeService.like(postId, user);
+    }
+
+    @DeleteMapping("/{postId}/likes")
+    @SecurityRequirement(name = "cookieAuth")
+    @Operation(summary = "게시글 좋아요 취소")
+    public PostLikeResponse unlike(@PathVariable Long postId, @AuthenticationPrincipal User user) {
+        return postLikeService.unlike(postId, user);
     }
 }

@@ -8,6 +8,7 @@ import com.codeiary.domain.blog.dto.response.BlogPostPageResponse;
 import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.fixture.BlogPostFixture;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
+import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.entity.enums.Role;
 import com.codeiary.domain.user.fixture.UserFixture;
@@ -32,11 +33,12 @@ class BlogPostListServiceTest {
 
     @Mock private BlogPostRepository posts;
     @Mock private BlogPostMapper postMapper;
+    @Mock private PostLikeRepository postLikes;
     private BlogPostListService service;
 
     @BeforeEach
     void setUp() {
-        service = new BlogPostListService(posts, postMapper);
+        service = new BlogPostListService(posts, postMapper, postLikes);
     }
 
     @Test
@@ -50,7 +52,7 @@ class BlogPostListServiceTest {
         given(postMapper.toListItemResponse(post)).willReturn(item);
 
         // when
-        BlogPostPageResponse response = service.getPublicPosts(" spring ", " Java ", null, BlogPostSort.LATEST, 1, 12);
+        BlogPostPageResponse response = service.getPublicPosts(" spring ", " Java ", null, BlogPostSort.LATEST, 1, 12, null);
 
         // then
         assertThat(response.content()).containsExactly(item);
@@ -81,25 +83,24 @@ class BlogPostListServiceTest {
     }
 
     @Test
-    @DisplayName("조회순 정렬을 선택할 수 있다.")
-    void sortByViews() {
+    @DisplayName("좋아요순 정렬을 선택할 수 있다.")
+    void sortByLikes() {
         // given
-        given(posts.findPublicPosts(eq(null), eq(null), eq(null), eq(BlogPostSort.VIEWS), any(Pageable.class)))
+        given(posts.findPublicPosts(eq(null), eq(null), eq(null), eq(BlogPostSort.LIKES), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(), Pageable.ofSize(12), 0));
 
         // when
-        service.getPublicPosts(null, null, null, BlogPostSort.VIEWS, 0, 12);
+        service.getPublicPosts(null, null, null, BlogPostSort.LIKES, 0, 12, null);
 
         // then
-        org.mockito.Mockito.verify(posts).findPublicPosts(any(), any(), any(), eq(BlogPostSort.VIEWS),
-                org.mockito.ArgumentMatchers.argThat(pageable ->
-                        pageable.getSort().getOrderFor("viewCount") != null));
+        org.mockito.BDDMockito.then(posts).should()
+                .findPublicPosts(eq(null), eq(null), eq(null), eq(BlogPostSort.LIKES), any(Pageable.class));
     }
 
     private BlogPostListItemResponse item(BlogPost post) {
         return new BlogPostListItemResponse(post.getId(),
                 new BlogAuthorResponse(post.getAuthor().getId(), post.getAuthor().getNickname(), null),
                 post.getTitle(), post.getCategory().getName(), List.of(), post.getRepresentativeImageUrl(),
-                post.isPublicPost(), post.getViewCount(), LocalDateTime.now(), LocalDateTime.now());
+                post.isPublicPost(), 0, false, LocalDateTime.now(), LocalDateTime.now());
     }
 }

@@ -12,6 +12,7 @@ import java.util.List;
 import com.codeiary.domain.blog.exception.BlogErrorCode;
 import com.codeiary.domain.blog.fixture.BlogPostFixture;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
+import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.image.validation.ImageUrlValidator;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.entity.enums.Role;
@@ -42,6 +43,7 @@ import static org.mockito.Mockito.never;
 class BlogPostServiceTest {
 
     @Mock private BlogPostRepository posts;
+    @Mock private PostLikeRepository postLikes;
     @Mock private ImageUrlValidator imageUrls;
     @Mock private CategoryRepository categories;
     @Mock private TagRepository tags;
@@ -49,7 +51,7 @@ class BlogPostServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new BlogPostService(posts, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags);
+        service = new BlogPostService(posts, postLikes, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags);
     }
 
     @Test
@@ -98,7 +100,6 @@ class BlogPostServiceTest {
         assertThatThrownBy(() -> service.delete(BlogPostFixture.ID, other))
                 .isInstanceOfSatisfying(RestApiException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(BlogErrorCode.POST_ACCESS_DENIED));
-        then(posts).should(never()).flush();
         then(posts).should(never()).delete(any());
     }
 
@@ -130,6 +131,5 @@ class BlogPostServiceTest {
                 .isInstanceOf(RestApiException.class);
         assertThat(post.getTitle()).isEqualTo("첫 기록");
         assertThat(post.isPublicPost()).isTrue();
-        then(posts).should(never()).flush();
     }
 }
