@@ -1,5 +1,9 @@
 package com.codeiary.domain.user.repository;
 
+import com.codeiary.domain.blog.entity.BlogPost;
+import com.codeiary.domain.blog.entity.Category;
+import com.codeiary.domain.blog.repository.BlogPostRepository;
+import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.user.entity.enums.OAuthProvider;
 import com.codeiary.domain.user.entity.enums.Role;
 import com.codeiary.domain.user.fixture.UserFixture;
@@ -14,6 +18,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.auditing.AuditingHandler;
 import org.springframework.data.auditing.CurrentDateTimeProvider;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -22,6 +27,8 @@ import static org.assertj.core.api.Assertions.catchThrowable;
 class UserRepositoryTest extends RepositoryTestSupport {
 
     @Autowired private UserRepository users;
+    @Autowired private BlogPostRepository posts;
+    @Autowired private CategoryRepository categories;
     @Autowired private EntityManager entityManager;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private AuditingHandler auditingHandler;
@@ -204,5 +211,35 @@ class UserRepositoryTest extends RepositoryTestSupport {
         assertThat(duplicateForOwner).isFalse();
         assertThat(duplicateForOther).isTrue();
         assertThat(unknownNickname).isFalse();
+    }
+
+    @Test
+    @DisplayName("공개 글 활동 순으로 온보딩한 이웃을 조회할 수 있다.")
+    void findNeighborhoodByPublicActivity() {
+        // given
+        var active = UserFixture.create("active@example.com");
+        active.updateProfile("활동기록자", null);
+        active = users.saveAndFlush(active);
+
+        var quiet = UserFixture.create("quiet@example.com");
+        quiet.updateProfile("조용한기록자", null);
+        quiet = users.saveAndFlush(quiet);
+        users.saveAndFlush(UserFixture.createDefaultUser());
+
+        var category = categories.saveAndFlush(Category.create(active, "개발"));
+        posts.saveAndFlush(BlogPost.create(active, "공개 글", "내용", category, null, true));
+        posts.saveAndFlush(BlogPost.create(active, "비공개 글", "내용", category, null, false));
+        entityManager.flush();
+        entityManager.clear();
+
+        // when
+        var result = users.findNeighborhood(PageRequest.of(0, 10));
+
+        // then
+        assertThat(result.getContent()).extracting("nickname")
+                .containsExactly("활동기록자", "조용한기록자");
+        assertThat(result.getContent()).extracting("postCount")
+                .containsExactly(1L, 0L);
+        assertThat(result.getTotalElements()).isEqualTo(2);
     }
 }

@@ -1,6 +1,8 @@
 package com.codeiary.domain.user.controller;
 
 import com.codeiary.domain.user.dto.response.PublicUserProfileResponse;
+import com.codeiary.domain.user.dto.response.UserNeighborhoodPageResponse;
+import com.codeiary.domain.user.dto.response.UserNeighborhoodResponse;
 import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.domain.user.service.UserService;
 import com.codeiary.global.exception.GlobalExceptionHandler;
@@ -13,6 +15,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+
+import java.util.List;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
@@ -72,5 +76,25 @@ class PublicUserControllerTest {
         jsonPath("$.id").value(UserFixture.ID).match(result);
         jsonPath("$.nickname").value("기록자").match(result);
         then(userService).should().getPublicProfileByNickname("기록자");
+    }
+
+    @Test
+    @DisplayName("이웃 사용자를 조회할 수 있다.")
+    void getNeighborhood() throws Exception {
+        // given
+        var residents = List.of(new UserNeighborhoodResponse(
+                UserFixture.ID, "기록자", null, "https://github.com/writer", null, 3));
+        given(userService.getNeighborhood(0, 10)).willReturn(
+                new UserNeighborhoodPageResponse(residents, 0, 10, 1, 1, true, true));
+
+        // when
+        MvcResult result = mockMvc.perform(get("/api/users/neighborhood")).andReturn();
+
+        // then
+        status().isOk().match(result);
+        jsonPath("$.content[0].nickname").value("기록자").match(result);
+        jsonPath("$.content[0].postCount").value(3).match(result);
+        jsonPath("$.totalElements").value(1).match(result);
+        then(userService).should().getNeighborhood(0, 10);
     }
 }
