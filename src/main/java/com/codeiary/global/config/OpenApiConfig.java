@@ -16,7 +16,9 @@ public class OpenApiConfig {
                 .title("Codeiary API")
                 .description("Codeiary 블로그 API 문서")
                 .version("v1"))
-                .components(new Components().addSecuritySchemes("bearerAuth", new SecurityScheme()
-                        .type(SecurityScheme.Type.HTTP).scheme("bearer").bearerFormat("JWT")));
+                .components(new Components().addSecuritySchemes("cookieAuth", new SecurityScheme()
+                        .type(SecurityScheme.Type.APIKEY)
+                        .in(SecurityScheme.In.COOKIE)
+                        .name("access_token")));
     }
 }

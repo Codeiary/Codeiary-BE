@@ -24,4 +24,8 @@ public abstract class TimeBaseEntity {
     @LastModifiedDate
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    protected void markModified() {
+        updatedAt = LocalDateTime.now();
+    }
 }
