@@ -5,6 +5,8 @@ import com.codeiary.domain.user.dto.request.OnboardingRequest;
 import com.codeiary.domain.user.dto.request.UpdateProfileRequest;
 import com.codeiary.domain.user.dto.response.NicknameAvailabilityResponse;
 import com.codeiary.domain.user.dto.response.PublicUserProfileResponse;
+import com.codeiary.domain.user.dto.response.UserNeighborhoodPageResponse;
+import com.codeiary.domain.user.dto.response.UserNeighborhoodResponse;
 import com.codeiary.domain.user.dto.response.UserProfileResponse;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.exception.UserErrorCode;
@@ -15,6 +17,8 @@ import com.codeiary.global.security.exception.SecurityErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,12 +27,22 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class UserService {
 
+    private static final int MAX_NEIGHBORHOOD_PAGE_SIZE = 100;
+
     private final UserRepository users;
     private final UserMapper userMapper;
     private final ImageUrlValidator imageUrls;
 
     public UserProfileResponse getProfile(User user) {
         return userMapper.toResponse(user);
+    }
+
+    public UserNeighborhoodPageResponse getNeighborhood(int page, int size) {
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), MAX_NEIGHBORHOOD_PAGE_SIZE);
+        Page<UserNeighborhoodResponse> result = users.findNeighborhood(PageRequest.of(safePage, safeSize));
+        return new UserNeighborhoodPageResponse(result.getContent(), result.getNumber(), result.getSize(),
+                result.getTotalElements(), result.getTotalPages(), result.isFirst(), result.isLast());
     }
 
     public PublicUserProfileResponse getPublicProfile(Long userId) {
