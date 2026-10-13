@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/posts/{postId}/comments")
+@RequestMapping("/posts/{postId}/comments")
 @RequiredArgsConstructor
 @Tag(name = "댓글")
 public class CommentController {
@@ -49,7 +49,7 @@ public class CommentController {
             @Valid @RequestBody CommentCreateRequest request
     ) {
         CommentResponse response = commentService.create(postId, author, request);
-        return ResponseEntity.created(URI.create("/api/posts/" + postId + "/comments/" + response.id()))
+        return ResponseEntity.created(URI.create("/posts/" + postId + "/comments/" + response.id()))
                 .body(response);
     }
 

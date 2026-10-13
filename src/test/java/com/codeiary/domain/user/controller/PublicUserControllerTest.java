@@ -48,7 +48,7 @@ class PublicUserControllerTest {
         given(userService.getPublicProfile(UserFixture.ID)).willReturn(profile);
 
         // when
-        MvcResult result = mockMvc.perform(get("/api/users/{userId}", UserFixture.ID)).andReturn();
+        MvcResult result = mockMvc.perform(get("/users/{userId}", UserFixture.ID)).andReturn();
 
         // then
         status().isOk().match(result);
@@ -69,7 +69,7 @@ class PublicUserControllerTest {
         given(userService.getPublicProfileByNickname("기록자")).willReturn(profile);
 
         // when
-        MvcResult result = mockMvc.perform(get("/api/users/by-nickname/{nickname}", "기록자")).andReturn();
+        MvcResult result = mockMvc.perform(get("/users/by-nickname/{nickname}", "기록자")).andReturn();
 
         // then
         status().isOk().match(result);
@@ -88,7 +88,7 @@ class PublicUserControllerTest {
                 new UserNeighborhoodPageResponse(residents, 0, 10, 1, 1, true, true));
 
         // when
-        MvcResult result = mockMvc.perform(get("/api/users/neighborhood")).andReturn();
+        MvcResult result = mockMvc.perform(get("/users/neighborhood")).andReturn();
 
         // then
         status().isOk().match(result);

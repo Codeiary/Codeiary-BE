@@ -14,8 +14,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpHeaders;
@@ -49,10 +47,16 @@ class TokenControllerTest {
                 .build();
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/reissue", "/refresh"})
+    @Test
+    @DisplayName("재발급 별칭이 제거되었음을 확인할 수 있다.")
+    void rejectRefreshAlias() throws Exception {
+        mockMvc.perform(post("/auth/refresh"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     @DisplayName("Refresh Token 쿠키로 토큰을 재발급할 수 있다.")
-    void reissueTokens(String path) throws Exception {
+    void reissueTokens() throws Exception {
         // given
         Instant now = Instant.now();
         TokenPair pair = new TokenPair("new-access", "new-refresh",
@@ -60,7 +64,7 @@ class TokenControllerTest {
         given(sessions.reissue("old-refresh")).willReturn(pair);
 
         // when
-        MvcResult result = mockMvc.perform(post("/api/auth" + path)
+        MvcResult result = mockMvc.perform(post("/auth/reissue")
                         .cookie(new Cookie("refresh_token", "old-refresh")))
                 .andReturn();
 
@@ -87,7 +91,7 @@ class TokenControllerTest {
                 .willThrow(new RestApiException(TokenErrorCode.TOKEN_EXPIRED));
 
         // when
-        MvcResult result = mockMvc.perform(post("/api/auth/reissue")
+        MvcResult result = mockMvc.perform(post("/auth/reissue")
                         .cookie(new Cookie("refresh_token", "expired-refresh")))
                 .andReturn();
 
@@ -107,7 +111,7 @@ class TokenControllerTest {
                 .willThrow(new RestApiException(TokenErrorCode.TOKEN_MISSING));
 
         // when
-        MvcResult result = mockMvc.perform(post("/api/auth/reissue")).andReturn();
+        MvcResult result = mockMvc.perform(post("/auth/reissue")).andReturn();
 
         // then
         status().isUnauthorized().match(result);
@@ -124,7 +128,7 @@ class TokenControllerTest {
         Cookie refreshCookie = new Cookie("refresh_token", "current-refresh");
 
         // when
-        MvcResult result = mockMvc.perform(post("/api/auth/logout")
+        MvcResult result = mockMvc.perform(post("/auth/logout")
                         .cookie(accessCookie, refreshCookie))
                 .andReturn();
 
