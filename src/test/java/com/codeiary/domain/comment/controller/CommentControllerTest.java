@@ -53,7 +53,7 @@ class CommentControllerTest extends IntegrationTestSupport {
         Cookie cookie = accessCookie(author);
 
         // when
-        String rootJson = mockMvc.perform(post("/api/posts/{postId}/comments", postId).cookie(cookie)
+        String rootJson = mockMvc.perform(post("/posts/{postId}/comments", postId).cookie(cookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"댓글 😀\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", containsString("/comments/")))
@@ -61,7 +61,7 @@ class CommentControllerTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.author.profileImageUrl").value("https://image.example.com/profile.png"))
                 .andReturn().getResponse().getContentAsString();
         Long rootId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(rootJson).get("id").asLong();
-        String replyJson = mockMvc.perform(post("/api/posts/{postId}/comments", postId).cookie(cookie)
+        String replyJson = mockMvc.perform(post("/posts/{postId}/comments", postId).cookie(cookie)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"content\":\"답글 🎉\",\"parentId\":" + rootId + "}"))
                 .andExpect(status().isCreated())
@@ -70,19 +70,19 @@ class CommentControllerTest extends IntegrationTestSupport {
         Long replyId = new com.fasterxml.jackson.databind.ObjectMapper().readTree(replyJson).get("id").asLong();
 
         // then
-        mockMvc.perform(get("/api/posts/{postId}/comments", postId))
+        mockMvc.perform(get("/posts/{postId}/comments", postId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].content").value("댓글 😀"))
                 .andExpect(jsonPath("$[1].content").value("답글 🎉"))
                 .andExpect(jsonPath("$[1].parentId").value(rootId));
-        mockMvc.perform(put("/api/posts/{postId}/comments/{commentId}", postId, rootId).cookie(cookie)
+        mockMvc.perform(put("/posts/{postId}/comments/{commentId}", postId, rootId).cookie(cookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"수정한 댓글\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content").value("수정한 댓글"))
                 .andExpect(jsonPath("$.updatedAt").isNotEmpty());
-        mockMvc.perform(delete("/api/posts/{postId}/comments/{commentId}", postId, rootId).cookie(cookie))
+        mockMvc.perform(delete("/posts/{postId}/comments/{commentId}", postId, rootId).cookie(cookie))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/posts/{postId}/comments", postId))
+        mockMvc.perform(get("/posts/{postId}/comments", postId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].deleted").value(true))
                 .andExpect(jsonPath("$[0].author").doesNotExist())
@@ -102,22 +102,22 @@ class CommentControllerTest extends IntegrationTestSupport {
         Cookie otherCookie = accessCookie(other);
 
         // when / then
-        mockMvc.perform(post("/api/posts/{postId}/comments", postId).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/posts/{postId}/comments", postId).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"content\":\"익명 댓글\"}"))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/posts/{postId}/comments", postId).cookie(authorCookie)
+        mockMvc.perform(post("/posts/{postId}/comments", postId).cookie(authorCookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"작성자 댓글\"}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.author.id").value(author.getId()));
         Long commentId = comments.findAllByTargetTypeAndTargetIdOrderByCreatedAtAscIdAsc(
                 CommentTargetType.BLOG_POST, postId).getFirst().getId();
-        mockMvc.perform(put("/api/posts/{postId}/comments/{commentId}", postId, commentId).cookie(authorCookie)
+        mockMvc.perform(put("/posts/{postId}/comments/{commentId}", postId, commentId).cookie(authorCookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"수정\"}"))
                 .andExpect(status().isOk());
-        mockMvc.perform(put("/api/posts/{postId}/comments/{commentId}", postId, commentId).cookie(otherCookie)
+        mockMvc.perform(put("/posts/{postId}/comments/{commentId}", postId, commentId).cookie(otherCookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"content\":\"가로채기\"}"))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(delete("/api/posts/{postId}/comments/{commentId}", postId, commentId).cookie(otherCookie))
+        mockMvc.perform(delete("/posts/{postId}/comments/{commentId}", postId, commentId).cookie(otherCookie))
                 .andExpect(status().isForbidden());
         assertThat(comments.findById(commentId).orElseThrow().getContent()).isEqualTo("수정");
     }
@@ -132,7 +132,7 @@ class CommentControllerTest extends IntegrationTestSupport {
 
         // when / then
         for (String content : new String[]{" ", "가".repeat(2001)}) {
-            mockMvc.perform(post("/api/posts/{postId}/comments", postId).cookie(cookie)
+            mockMvc.perform(post("/posts/{postId}/comments", postId).cookie(cookie)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
                                     java.util.Map.of("content", content))))

@@ -59,7 +59,7 @@ class ImageControllerTest {
                 Instant.parse("2026-10-08T01:05:00Z")));
 
         // when & then
-        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"contentType\":\"image/png\",\"contentLength\":128,\"userId\":999}"))
                 .andExpect(status().isOk())
                 .andExpect(header().string("Cache-Control", "no-store"))
@@ -77,7 +77,7 @@ class ImageControllerTest {
     @DisplayName("필수 항목이 없거나 파일 크기가 잘못되면 거절할 수 있다.")
     void rejectInvalidRequest(String body) throws Exception {
         // when & then
-        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/images/presigned-url").contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
         then(imageService).shouldHaveNoInteractions();
     }

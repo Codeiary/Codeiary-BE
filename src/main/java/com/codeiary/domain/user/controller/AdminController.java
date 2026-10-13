@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/admin")
+@RequestMapping("/admin")
 @RequiredArgsConstructor
 @Tag(name = "관리자")
 @SecurityRequirement(name = "cookieAuth")

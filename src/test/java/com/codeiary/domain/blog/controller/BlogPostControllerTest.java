@@ -53,7 +53,7 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         Cookie cookie = accessCookie(author);
 
         // when
-        String location = mockMvc.perform(post("/api/posts").cookie(cookie)
+        String location = mockMvc.perform(post("/posts").cookie(cookie)
                         .contentType(MediaType.APPLICATION_JSON).content(BlogPostFixture.REQUEST_JSON))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.author.id").value(author.getId()))
@@ -65,7 +65,7 @@ class BlogPostControllerTest extends IntegrationTestSupport {
                 .andReturn().getResponse().getHeader("Location");
 
         // then
-        assertThat(location).startsWith("/api/posts/");
+        assertThat(location).startsWith("/posts/");
         mockMvc.perform(get(location))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("첫 기록"))
@@ -100,14 +100,14 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         Cookie cookie = accessCookie(other);
 
         // when / then
-        mockMvc.perform(get("/api/posts/{id}", id))
+        mockMvc.perform(get("/posts/{id}", id))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("POST_NOT_FOUND"));
-        mockMvc.perform(get("/api/posts/{id}", id).cookie(cookie)).andExpect(status().isNotFound());
-        mockMvc.perform(put("/api/posts/{id}", id).cookie(cookie)
+        mockMvc.perform(get("/posts/{id}", id).cookie(cookie)).andExpect(status().isNotFound());
+        mockMvc.perform(put("/posts/{id}", id).cookie(cookie)
                         .contentType(MediaType.APPLICATION_JSON).content(BlogPostFixture.REQUEST_JSON))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(delete("/api/posts/{id}", id).cookie(cookie)).andExpect(status().isNotFound());
+        mockMvc.perform(delete("/posts/{id}", id).cookie(cookie)).andExpect(status().isNotFound());
         assertThat(posts.existsById(id)).isTrue();
     }
 
@@ -121,21 +121,21 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         Cookie cookie = accessCookie(reader);
 
         // when / then
-        mockMvc.perform(post("/api/posts/{id}/likes", postId))
+        mockMvc.perform(post("/posts/{id}/likes", postId))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/posts/{id}/likes", postId).cookie(cookie))
+        mockMvc.perform(post("/posts/{id}/likes", postId).cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likeCount").value(1))
                 .andExpect(jsonPath("$.likedByMe").value(true));
-        mockMvc.perform(post("/api/posts/{id}/likes", postId).cookie(cookie))
+        mockMvc.perform(post("/posts/{id}/likes", postId).cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likeCount").value(1));
         assertThat(postLikes.countForPost(postId)).isEqualTo(1);
-        mockMvc.perform(get("/api/posts/{id}", postId).cookie(cookie))
+        mockMvc.perform(get("/posts/{id}", postId).cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likeCount").value(1))
                 .andExpect(jsonPath("$.likedByMe").value(true));
-        mockMvc.perform(delete("/api/posts/{id}/likes", postId).cookie(cookie))
+        mockMvc.perform(delete("/posts/{id}/likes", postId).cookie(cookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.likeCount").value(0))
                 .andExpect(jsonPath("$.likedByMe").value(false));
@@ -150,16 +150,16 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         Cookie cookie = accessCookie(pending);
 
         // when / then
-        mockMvc.perform(post("/api/posts").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/posts").contentType(MediaType.APPLICATION_JSON)
                         .content(BlogPostFixture.REQUEST_JSON)).andExpect(status().isUnauthorized());
-        mockMvc.perform(put("/api/posts/1").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(put("/posts/1").contentType(MediaType.APPLICATION_JSON)
                         .content(BlogPostFixture.REQUEST_JSON)).andExpect(status().isUnauthorized());
-        mockMvc.perform(delete("/api/posts/1")).andExpect(status().isUnauthorized());
-        mockMvc.perform(post("/api/posts").cookie(cookie).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(delete("/posts/1")).andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/posts").cookie(cookie).contentType(MediaType.APPLICATION_JSON)
                         .content(BlogPostFixture.REQUEST_JSON)).andExpect(status().isForbidden());
-        mockMvc.perform(put("/api/posts/1").cookie(cookie).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(put("/posts/1").cookie(cookie).contentType(MediaType.APPLICATION_JSON)
                         .content(BlogPostFixture.REQUEST_JSON)).andExpect(status().isForbidden());
-        mockMvc.perform(delete("/api/posts/1").cookie(cookie)).andExpect(status().isForbidden());
+        mockMvc.perform(delete("/posts/1").cookie(cookie)).andExpect(status().isForbidden());
     }
 
     @ParameterizedTest
@@ -178,10 +178,10 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         Long id = persistPost(author, true);
 
         // when / then
-        mockMvc.perform(post("/api/posts").cookie(cookie).contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/posts").cookie(cookie).contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
-        mockMvc.perform(put("/api/posts/{id}", id).cookie(cookie)
+        mockMvc.perform(put("/posts/{id}", id).cookie(cookie)
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest());
         assertThat(posts.findById(id).orElseThrow().getTitle()).isEqualTo("첫 기록");
@@ -201,7 +201,7 @@ class BlogPostControllerTest extends IntegrationTestSupport {
                 """.formatted(tags);
 
         // when / then
-        mockMvc.perform(post("/api/posts").cookie(accessCookie(author))
+        mockMvc.perform(post("/posts").cookie(accessCookie(author))
                         .contentType(MediaType.APPLICATION_JSON).content(body))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"));
@@ -214,12 +214,12 @@ class BlogPostControllerTest extends IntegrationTestSupport {
         // given
         var author = users.saveAndFlush(UserFixture.create(Role.USER));
         var cookie = accessCookie(author);
-        mockMvc.perform(post("/api/posts").cookie(cookie)
+        mockMvc.perform(post("/posts").cookie(cookie)
                         .contentType(MediaType.APPLICATION_JSON).content(BlogPostFixture.REQUEST_JSON))
                 .andExpect(status().isCreated());
 
         // when / then
-        for (String path : new String[]{"/api/posts", "/api/posts/mine"}) {
+        for (String path : new String[]{"/posts", "/posts/mine"}) {
             mockMvc.perform(get(path).cookie(cookie).param("category", "Java").param("tag", "SPRING"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalElements").value(1))

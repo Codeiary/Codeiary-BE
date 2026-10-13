@@ -57,12 +57,13 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
                         .requestMatchers("/oauth2/**", "/login/**").permitAll()
                         .requestMatchers(HttpMethod.POST,
-                                "/api/auth/reissue", "/api/auth/refresh", "/api/auth/logout").permitAll()
-                        .requestMatchers("/api/admin", "/api/admin/**").hasRole("ADMIN")
-                        .requestMatchers(HttpMethod.GET, "/api/users/me", "/api/users/nickname-availability").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/posts/mine").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/users/me/onboarding").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/**").permitAll()
+                                "/auth/reissue", "/auth/logout").permitAll()
+                        .requestMatchers("/admin", "/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/users/me", "/users/nickname-availability").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/posts/mine").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/users/me/onboarding").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/posts/**", "/users/**",
+                                "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().hasAnyRole("USER", "ADMIN"))
                 .addFilterBefore(tokenFilter,
                         UsernamePasswordAuthenticationFilter.class)

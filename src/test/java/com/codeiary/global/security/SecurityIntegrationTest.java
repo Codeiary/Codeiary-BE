@@ -15,7 +15,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
@@ -55,7 +54,7 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
     @Test
     @DisplayName("허용된 프론트엔드의 쿠키 인증 사전 요청을 처리할 수 있다.")
     void allowFrontendPreflight() throws Exception {
-        mockMvc.perform(options("/api/users/me")
+        mockMvc.perform(options("/users/me")
                         .header("Origin", "http://localhost:5173")
                         .header("Access-Control-Request-Method", "GET"))
                 .andExpect(status().isOk())
@@ -67,7 +66,7 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
     @DisplayName("인증이 없는 이미지 업로드를 차단할 수 있다.")
     void rejectAnonymousImageUpload() throws Exception {
         // when & then
-        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"contentType\":\"image/png\",\"contentLength\":128}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
@@ -80,17 +79,17 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
         String profile = "{\"nickname\":\"기록자\"}";
 
         // when & then
-        mockMvc.perform(get("/api/users/nickname-availability").param("nickname", "기록자"))
+        mockMvc.perform(get("/users/nickname-availability").param("nickname", "기록자"))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(multipart("/api/users/me/onboarding").param("nickname", "기록자"))
+        mockMvc.perform(multipart("/users/me/onboarding").param("nickname", "기록자"))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(put("/api/users/me/profile")
+        mockMvc.perform(put("/users/me/profile")
                         .contentType(MediaType.APPLICATION_JSON).content(profile))
                 .andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/users/{userId}", Long.MAX_VALUE))
+        mockMvc.perform(get("/users/{userId}", Long.MAX_VALUE))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND_USER"));
-        mockMvc.perform(get("/api/users/by-nickname/{nickname}", "unregistered_987654"))
+        mockMvc.perform(get("/users/by-nickname/{nickname}", "unregistered_987654"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND_USER"));
     }
@@ -104,21 +103,21 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
         Cookie accessCookie = accessCookie(user);
 
         // when & then
-        mockMvc.perform(get("/api/users/me").cookie(accessCookie))
+        mockMvc.perform(get("/users/me").cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("PENDING"));
-        mockMvc.perform(get("/api/users/nickname-availability").param("nickname", "새기록자")
+        mockMvc.perform(get("/users/nickname-availability").param("nickname", "새기록자")
                         .cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.available").value(true));
-        mockMvc.perform(multipart("/api/users/me/onboarding")
+        mockMvc.perform(multipart("/users/me/onboarding")
                         .param("nickname", "").cookie(accessCookie))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(get("/api/users/me").cookie(accessCookie))
+        mockMvc.perform(get("/users/me").cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("PENDING"))
                 .andExpect(jsonPath("$.onboardingCompleted").value(false));
-        mockMvc.perform(multipart("/api/users/me/onboarding")
+        mockMvc.perform(multipart("/users/me/onboarding")
                         .param("nickname", "새기록자").cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("USER"))
@@ -127,10 +126,10 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
         entityManager.clear();
         assertThat(tokens.validateAccessToken(accessCookie.getValue()).get("role", String.class))
                 .isEqualTo("PENDING");
-        mockMvc.perform(put("/api/users/me/profile").cookie(accessCookie)
+        mockMvc.perform(put("/users/me/profile").cookie(accessCookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"기록자\"}"))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/api/users/me").cookie(accessCookie))
+        mockMvc.perform(get("/users/me").cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("USER"));
     }
@@ -144,12 +143,12 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
         Cookie accessCookie = accessCookie(user);
 
         // when & then
-        mockMvc.perform(put("/api/users/me/profile").cookie(accessCookie)
+        mockMvc.perform(put("/users/me/profile").cookie(accessCookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"우회차단\"}"))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(get("/api/admin/me").cookie(accessCookie))
+        mockMvc.perform(get("/admin/me").cookie(accessCookie))
                 .andExpect(status().isForbidden());
-        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"contentType\":\"image/gif\",\"contentLength\":128}")
                         .cookie(accessCookie))
                 .andExpect(status().isForbidden())
@@ -166,29 +165,28 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
         Cookie accessCookie = accessCookie(user);
 
         // when & then
-        mockMvc.perform(put("/api/users/me/profile").cookie(accessCookie)
+        mockMvc.perform(put("/users/me/profile").cookie(accessCookie)
                         .contentType(MediaType.APPLICATION_JSON).content("{\"nickname\":\"기록자\"}"))
                 .andExpect(status().isOk());
-        mockMvc.perform(get("/api/admin/me").cookie(accessCookie))
+        mockMvc.perform(get("/admin/me").cookie(accessCookie))
                 .andExpect(role == Role.ADMIN ? status().isOk() : status().isForbidden());
-        mockMvc.perform(post("/api/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/images/presigned-url").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"contentType\":\"image/gif\",\"contentLength\":128}")
                         .cookie(accessCookie))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_IMAGE"));
     }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"/reissue", "/refresh"})
+    @Test
     @Transactional
     @DisplayName("온보딩 전에도 토큰을 재발급하고 로그아웃할 수 있다.")
-    void allowPendingTokenLifecycle(String path) throws Exception {
+    void allowPendingTokenLifecycle() throws Exception {
         // given
         User user = users.saveAndFlush(UserFixture.create(Role.PENDING));
         TokenPair pair = sessions.createSession(user.getEmail());
 
         // when
-        MvcResult reissued = mockMvc.perform(post("/api/auth" + path)
+        MvcResult reissued = mockMvc.perform(post("/auth/reissue")
                         .cookie(new Cookie("refresh_token", pair.refreshToken())))
                 .andExpect(status().isNoContent())
                 .andReturn();
@@ -198,12 +196,12 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
         assertThat(refreshCookie).isNotNull();
 
         // then
-        mockMvc.perform(get("/api/users/me").cookie(accessCookie))
+        mockMvc.perform(get("/users/me").cookie(accessCookie))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.role").value("PENDING"));
-        mockMvc.perform(post("/api/auth/logout").cookie(accessCookie, refreshCookie))
+        mockMvc.perform(post("/auth/logout").cookie(accessCookie, refreshCookie))
                 .andExpect(status().isNoContent());
-        mockMvc.perform(get("/api/users/me").cookie(accessCookie))
+        mockMvc.perform(get("/users/me").cookie(accessCookie))
                 .andExpect(status().isUnauthorized());
     }
 

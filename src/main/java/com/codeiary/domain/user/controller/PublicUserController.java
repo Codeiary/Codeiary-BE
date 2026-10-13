@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/users")
 @RequiredArgsConstructor
 @Tag(name = "공개 프로필")
 public class PublicUserController {
