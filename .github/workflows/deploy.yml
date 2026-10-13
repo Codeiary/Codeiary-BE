@@ -53,6 +53,7 @@ jobs:
         with:
           context: .
           platforms: linux/arm64
+          provenance: false
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
       - name: Deploy through SSM
