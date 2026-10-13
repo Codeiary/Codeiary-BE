@@ -27,5 +27,8 @@ server:
 
 token:
   cookie:
-    secure: true
-    same-site: Strict
+    secure: ${TOKEN_COOKIE_SECURE:true}
+    same-site: ${TOKEN_COOKIE_SAME_SITE:Strict}
+
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:https://codeiary.com}
