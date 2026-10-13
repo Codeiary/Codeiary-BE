@@ -3,6 +3,8 @@ services:
     image: postgres:17-alpine
     container_name: codeiary-postgres
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-codeiary}
       POSTGRES_USER: ${POSTGRES_USER:-codeiary}
@@ -17,31 +19,6 @@ services:
     networks:
       - backend
 
-  api:
-    image: ${IMAGE:-codeiary-api:latest}
-    container_name: codeiary-api
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-codeiary}
-      DB_USERNAME: ${POSTGRES_USER:-codeiary}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      JWT_SECRET: ${JWT_SECRET:?Set a Base64-encoded JWT_SECRET of at least 32 bytes}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      OAUTH2_REDIRECT_HOME: ${OAUTH2_REDIRECT_HOME:-http://localhost:5173/auth/callback}
-      MEDIA_S3_BUCKET: ${MEDIA_S3_BUCKET:-}
-      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-}
-      AWS_REGION: ${AWS_REGION:-ap-northeast-2}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
-    networks:
-      - backend
 
 volumes:
   postgres-data:

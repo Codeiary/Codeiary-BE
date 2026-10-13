@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/posts")
+@RequestMapping("/posts")
 @RequiredArgsConstructor
 @Tag(name = "게시글")
 public class BlogPostController {
@@ -73,7 +73,7 @@ public class BlogPostController {
             @Valid @RequestBody BlogPostRequest request
     ) {
         BlogPostResponse response = postService.create(user, request);
-        return ResponseEntity.created(URI.create("/api/posts/" + response.id())).body(response);
+        return ResponseEntity.created(URI.create("/posts/" + response.id())).body(response);
     }
 
     @GetMapping("/{postId}")

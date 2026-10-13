@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/auth")
 @RequiredArgsConstructor
 public class TokenController {
 
@@ -24,7 +24,7 @@ public class TokenController {
     private final TokenCookieManager cookies;
 
     @Operation(summary = "토큰 재발급", description = "Refresh Token 쿠키를 교체하고 새 Access Token 쿠키를 발급합니다.")
-    @PostMapping({"/reissue", "/refresh"})
+    @PostMapping("/reissue")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void reissue(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");

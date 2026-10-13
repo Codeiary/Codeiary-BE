@@ -50,7 +50,7 @@ class TokenAuthenticationFilterTest {
         TokenCookieManager cookies = TokenFixture.cookies("");
         filter = new TokenAuthenticationFilter(cookies, sessions);
         request = new MockHttpServletRequest();
-        request.setServletPath("/api/users/me");
+        request.setServletPath("/users/me");
         response = new MockHttpServletResponse();
     }
 
@@ -134,7 +134,7 @@ class TokenAuthenticationFilterTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"/api/auth/logout", "/api/auth/reissue", "/api/auth/refresh"})
+    @ValueSource(strings = {"/auth/logout", "/auth/reissue"})
     @DisplayName("로그아웃과 재발급은 Access Token 인증 없이 처리할 수 있다.")
     void skipAccessAuthenticationForSessionEndpoints(String path) throws Exception {
         // given

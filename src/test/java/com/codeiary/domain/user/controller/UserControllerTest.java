@@ -62,7 +62,7 @@ class UserControllerTest {
                 .willReturn(new NicknameAvailabilityResponse(true));
 
         // when
-        MvcResult result = mockMvc.perform(get("/api/users/nickname-availability")
+        MvcResult result = mockMvc.perform(get("/users/nickname-availability")
                 .param("nickname", "기록자")).andReturn();
 
         // then
@@ -76,7 +76,7 @@ class UserControllerTest {
     @DisplayName("비어 있거나 잘못된 닉네임을 거절할 수 있다.")
     void rejectInvalidOnboarding(String nickname) throws Exception {
         // when
-        MvcResult result = mockMvc.perform(multipart("/api/users/me/onboarding")
+        MvcResult result = mockMvc.perform(multipart("/users/me/onboarding")
                 .param("nickname", nickname)).andReturn();
 
         // then
@@ -93,7 +93,7 @@ class UserControllerTest {
         given(userService.updateProfile(UserFixture.ID, request)).willReturn(UserFixture.response());
 
         // when
-        MvcResult result = mockMvc.perform(put("/api/users/me/profile")
+        MvcResult result = mockMvc.perform(put("/users/me/profile")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"nickname":"기록자","githubUrl":"https://github.com/writer","contactEmail":"contact@example.com"}
@@ -108,7 +108,7 @@ class UserControllerTest {
     @DisplayName("GitHub 프로필이 아닌 주소를 거절할 수 있다.")
     void rejectInvalidGithubUrl() throws Exception {
         // when
-        MvcResult result = mockMvc.perform(put("/api/users/me/profile")
+        MvcResult result = mockMvc.perform(put("/users/me/profile")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"nickname":"기록자","githubUrl":"https://example.com/writer"}
