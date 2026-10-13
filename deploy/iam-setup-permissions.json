@@ -1,0 +1,46 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ConfigureGitHubOidcProvider",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateOpenIDConnectProvider",
+        "iam:GetOpenIDConnectProvider",
+        "iam:TagOpenIDConnectProvider"
+      ],
+      "Resource": "arn:aws:iam::448049834331:oidc-provider/token.actions.githubusercontent.com"
+    },
+    {
+      "Sid": "ConfigureCodeiaryGitHubDeploymentRole",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:TagRole",
+        "iam:GetRole",
+        "iam:UpdateAssumeRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::448049834331:role/CodeiaryGitHubDeployRole"
+    },
+    {
+      "Sid": "ConfigureCodeiaryEc2UploadPolicy",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::448049834331:role/codeiary-be-ssm-role"
+    },
+    {
+      "Sid": "ReadCodeiaryEc2InstanceProfile",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetInstanceProfile"
+      ],
+      "Resource": "arn:aws:iam::448049834331:instance-profile/codeiary-be-ssm-profile"
+    }
+  ]
+}
