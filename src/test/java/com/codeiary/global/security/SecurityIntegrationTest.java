@@ -25,10 +25,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
@@ -41,6 +43,25 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
     @Autowired private JwtTokenProvider tokens;
     @Autowired private TokenSessionService sessions;
     @Autowired private EntityManager entityManager;
+
+    @Test
+    @DisplayName("인증 없이 헬스 체크를 조회할 수 있다.")
+    void checkHealthWithoutAuthentication() throws Exception {
+        mockMvc.perform(get("/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ok"));
+    }
+
+    @Test
+    @DisplayName("허용된 프론트엔드의 쿠키 인증 사전 요청을 처리할 수 있다.")
+    void allowFrontendPreflight() throws Exception {
+        mockMvc.perform(options("/api/users/me")
+                        .header("Origin", "http://localhost:5173")
+                        .header("Access-Control-Request-Method", "GET"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:5173"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+    }
 
     @Test
     @DisplayName("인증이 없는 이미지 업로드를 차단할 수 있다.")

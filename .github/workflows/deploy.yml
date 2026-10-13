@@ -1,85 +1,85 @@
-name: Build and deploy
+name: Build and deploy Codeiary API
 
 on:
   push:
-    branches: ["main"]
-    paths:
-      - "src/**"
-      - "build.gradle"
-      - "settings.gradle"
-      - "gradle/**"
-      - "gradlew"
-      - "Dockerfile"
-      - ".dockerignore"
-      - ".env.example"
-      - "compose.yaml"
-      - "deploy/**"
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
+concurrency:
+  group: codeiary-production
+  cancel-in-progress: false
+
 env:
-  REGISTRY: public.ecr.aws
-  REGISTRY_ALIAS: c6w0t5f3
-  IMAGE_NAME: codeiary-api
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: codeiary-api
 
 jobs:
-  build-and-push:
+  deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - name: Configure temporary AWS credentials
+      - name: AWS credentials through OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-      - uses: aws-actions/amazon-ecr-login@v2
-        with:
-          registry-type: public
-      - id: metadata
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.REGISTRY_ALIAS }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,format=long
-      - uses: docker/build-push-action@v6
+          role-to-assume: ${{ vars.EC2_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Check immutable commit image
+        id: image
+        shell: bash
+        run: |
+          set -euo pipefail
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" \
+            --image-ids "imageTag=$GITHUB_SHA" > /tmp/codeiary-image.json 2> /tmp/codeiary-image-error.txt; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif grep -q ImageNotFoundException /tmp/codeiary-image-error.txt; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            cat /tmp/codeiary-image-error.txt >&2
+            exit 1
+          fi
+      - name: Build and push ARM64 image
+        if: steps.image.outputs.exists != 'true'
+        uses: docker/build-push-action@v6
         with:
           context: .
+          platforms: linux/arm64
+          provenance: false
           push: true
-          tags: ${{ steps.metadata.outputs.tags }}
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Configure temporary AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
       - name: Deploy through SSM
         env:
-          INSTANCE_ID: ${{ vars.SSM_INSTANCE_ID }}
+          INSTANCE_ID: ${{ vars.EC2_SSM_INSTANCE_ID }}
+        shell: bash
         run: |
-          IMAGE="${REGISTRY}/${REGISTRY_ALIAS}/${IMAGE_NAME}:sha-${GITHUB_SHA}"
-          COMMAND_ID=$(aws ssm send-command \
-            --region "${{ vars.AWS_REGION }}" \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name AWS-RunShellScript \
-            --comment "Deploy Codeiary API ${GITHUB_SHA}" \
-            --parameters commands="[
-              \"set -eu\",
-              \"sudo /usr/local/sbin/codeiary-deploy-api ${IMAGE}\"
-            ]" --query 'Command.CommandId' --output text)
-          for attempt in $(seq 1 60); do
-            STATUS=$(aws ssm get-command-invocation --region "${{ vars.AWS_REGION }}" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query Status --output text 2>/dev/null || true)
-            case "$STATUS" in
-              Success) aws ssm get-command-invocation --region "${{ vars.AWS_REGION }}" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"; exit 0 ;;
-              Failed|Cancelled|TimedOut) aws ssm get-command-invocation --region "${{ vars.AWS_REGION }}" --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"; exit 1 ;;
+          set -euo pipefail
+          command_id=$(aws ssm send-command \
+            --region "$AWS_REGION" --instance-ids "$INSTANCE_ID" \
+            --document-name CodeiaryDeployApi \
+            --comment "Deploy Codeiary API $GITHUB_SHA" \
+            --parameters "imageTag=$GITHUB_SHA" \
+            --query Command.CommandId --output text)
+          echo "SSM command_id=$command_id"
+          for attempt in $(seq 1 100); do
+            status=$(aws ssm get-command-invocation --region "$AWS_REGION" \
+              --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || true)
+            case "$status" in
+              Success) echo "Deployment succeeded: $GITHUB_SHA"; exit 0 ;;
+              Failed|Cancelled|TimedOut|Cancelling)
+                echo "Deployment failed: $status, command_id=$command_id" >&2
+                exit 1 ;;
             esac
             sleep 10
           done
-          echo "SSM command $COMMAND_ID did not finish within 10 minutes" >&2
+          echo "Deployment wait timed out: $command_id" >&2
           exit 1

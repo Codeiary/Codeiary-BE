@@ -6,6 +6,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Configuration;
@@ -17,10 +18,10 @@ public class S3PresignerConfig {
     @Value("${cloud.aws.s3.region}")
     private String region;
 
-    @Value("${cloud.aws.s3.access-key}")
+    @Value("${cloud.aws.s3.access-key:local}")
     private String accessKey;
 
-    @Value("${cloud.aws.s3.secret-key}")
+    @Value("${cloud.aws.s3.secret-key:local}")
     private String secretKey;
 
     @Value("${cloud.aws.s3.endpoint:}")
@@ -30,10 +31,11 @@ public class S3PresignerConfig {
     public S3Presigner s3Presigner() {
         var builder = S3Presigner.builder()
                 .region(Region.of(region))
-                .credentialsProvider(StaticCredentialsProvider.create(
-                        AwsBasicCredentials.create(accessKey, secretKey)));
+                .credentialsProvider(DefaultCredentialsProvider.builder().build());
         if (StringUtils.hasText(endpoint)) {
-            builder.endpointOverride(URI.create(endpoint))
+            builder.credentialsProvider(StaticCredentialsProvider.create(
+                            AwsBasicCredentials.create(accessKey, secretKey)))
+                    .endpointOverride(URI.create(endpoint))
                     .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build());
         }
         return builder.build();

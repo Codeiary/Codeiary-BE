@@ -19,6 +19,8 @@ class S3PresignerConfigTest {
     void configurePresigner(boolean local) {
         // given
         var runner = new ApplicationContextRunner().withUserConfiguration(S3PresignerConfig.class)
+                .withSystemProperties("aws.accessKeyId=test-access-key",
+                        "aws.secretAccessKey=test-secret-key")
                 .withPropertyValues("cloud.aws.s3.region=ap-northeast-2",
                         "cloud.aws.s3.access-key=test-access-key",
                         "cloud.aws.s3.secret-key=test-secret-key");
