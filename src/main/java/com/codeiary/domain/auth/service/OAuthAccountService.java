@@ -4,6 +4,7 @@ import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.exception.UserErrorCode;
 import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.AuthInfo;
 import com.codeiary.global.security.exception.SecurityErrorCode;
 import java.util.Locale;
@@ -22,6 +23,7 @@ public class OAuthAccountService {
     private final UserRepository users;
 
     @Transactional
+    @LogExecution
     public User getOrCreate(AuthInfo profile) {
         if (profile.provider() == null || !profile.emailVerified()) {
             throw new RestApiException(SecurityErrorCode.UNAUTHORIZED);

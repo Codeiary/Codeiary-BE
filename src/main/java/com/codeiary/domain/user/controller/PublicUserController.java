@@ -3,6 +3,7 @@ package com.codeiary.domain.user.controller;
 import com.codeiary.domain.user.dto.response.PublicUserProfileResponse;
 import com.codeiary.domain.user.dto.response.UserNeighborhoodPageResponse;
 import com.codeiary.domain.user.service.UserService;
+import com.codeiary.global.logging.LogExecution;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@LogExecution
 @RequestMapping("/users")
 @RequiredArgsConstructor
 @Tag(name = "공개 프로필")

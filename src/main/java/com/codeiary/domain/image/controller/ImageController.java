@@ -3,6 +3,7 @@ package com.codeiary.domain.image.controller;
 import com.codeiary.domain.image.dto.request.ImagePresignRequest;
 import com.codeiary.domain.image.dto.response.ImageUploadResponse;
 import com.codeiary.domain.image.service.ImageService;
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@LogExecution
 @RequestMapping("/images")
 @RequiredArgsConstructor
 @Tag(name = "이미지")

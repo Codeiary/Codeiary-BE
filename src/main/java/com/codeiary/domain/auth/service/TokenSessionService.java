@@ -3,6 +3,7 @@ package com.codeiary.domain.auth.service;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.entity.RefreshToken;
 import com.codeiary.domain.auth.entity.TokenBlacklist;
@@ -33,6 +34,7 @@ public class TokenSessionService {
     private final JwtTokenProvider tokens;
 
     @Transactional
+    @LogExecution
     public TokenPair createSession(String email) {
         User user = users.findByEmail(email)
                 .filter(User::isEnabled)
@@ -44,6 +46,7 @@ public class TokenSessionService {
     }
 
     @Transactional(noRollbackFor = RestApiException.class)
+    @LogExecution
     public TokenPair reissue(String rawRefreshToken) {
         Claims claims = tokens.validateRefreshToken(rawRefreshToken);
         UUID sessionId = UUID.fromString(claims.get("sid", String.class));
@@ -73,6 +76,7 @@ public class TokenSessionService {
     }
 
     @Transactional
+    @LogExecution
     public void logout(String rawRefreshToken, String rawAccessToken) {
         logoutClaims(rawRefreshToken, rawAccessToken).ifPresent(claims -> {
             if (users.findByIdForUpdate(Long.valueOf(claims.getSubject())).isEmpty()) {

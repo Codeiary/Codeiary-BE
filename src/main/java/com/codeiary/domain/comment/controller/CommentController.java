@@ -4,6 +4,7 @@ import com.codeiary.domain.comment.dto.request.CommentCreateRequest;
 import com.codeiary.domain.comment.dto.request.CommentUpdateRequest;
 import com.codeiary.domain.comment.dto.response.CommentResponse;
 import com.codeiary.domain.comment.service.CommentService;
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@LogExecution
 @RequestMapping("/posts/{postId}/comments")
 @RequiredArgsConstructor
 @Tag(name = "댓글")
