@@ -306,6 +306,11 @@ GitHub Actions 변수는 `EC2_AWS_ROLE_ARN`, `EC2_SSM_INSTANCE_ID`입니다.
 비밀값은 임시 환경 파일로 전달하고 배포 종료 시 파일을 삭제합니다.
 S3 업로드는 EC2 IAM 역할과 버킷 정책으로 허용하며 정적 AWS 키를 사용하지 않습니다.
 
+운영 애플리케이션은 요청마다 trace ID와 사용자 ID를 MDC에 넣어 시작·종료 로그를 남기며, `X-Request-Id` 응답 헤더로 같은 요청을 확인할 수 있습니다. 4xx 응답은 `WARN`, 5xx 응답은 `ERROR` 레벨입니다.
+Docker `json-file` 드라이버는 로그 파일당 10MiB, 최대 3개까지 보관하고, Grafana Alloy는 로그 파일을 읽기 전용으로 마운트해 `172.31.14.120:3100`의 Loki로 전송합니다.
+Alloy에는 Docker 소켓을 마운트하지 않아 Docker 데몬 제어 권한을 주지 않습니다.
+모니터링 보안 그룹의 TCP 3100 인바운드는 백엔드 보안 그룹에서만 허용해야 합니다.
+
 운영 DB는 기존 데이터와 Flyway 이력을 유지합니다. 마이그레이션은 `V1__create_schema.sql`에 있습니다.
 `compose.yaml`은 로컬 개발용 PostgreSQL만 실행하며 운영 배포에는 사용하지 않습니다.
 
