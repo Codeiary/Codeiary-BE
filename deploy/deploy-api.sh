@@ -44,11 +44,29 @@ PY
 
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY" >/dev/null 2>&1
 docker pull "$IMAGE" >/dev/null
+
+# Alloy reads the API container's bounded Docker log files and forwards them
+# over the private VPC network to Loki on the monitoring instance.
+mkdir -p /opt/codeiary/alloy
+config_container=$(docker create "$IMAGE")
+docker cp "$config_container:/app/alloy.alloy" /opt/codeiary/alloy/config.alloy >/dev/null
+docker rm "$config_container" >/dev/null
+chmod 600 /opt/codeiary/alloy/config.alloy
+docker pull grafana/alloy:v1.20.1 >/dev/null
+docker rm -f codeiary-alloy >/dev/null 2>&1 || true
+docker run -d --name codeiary-alloy --restart unless-stopped \
+  --memory=128m --cpus=0.25 --cap-drop ALL --security-opt no-new-privileges \
+  --log-driver local --log-opt max-size=10m --log-opt max-file=3 \
+  --mount type=bind,src=/var/lib/docker/containers,dst=/var/lib/docker/containers,readonly \
+  -v /opt/codeiary/alloy/config.alloy:/etc/alloy/config.alloy:ro \
+  -v codeiary-alloy-data:/var/lib/alloy/data \
+  grafana/alloy:v1.20.1 run --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy >/dev/null
+
 previous_image=$(docker inspect --format '{{.Config.Image}}' codeiary-api 2>/dev/null || true)
 start_container() {
   docker run -d --name codeiary-api --restart unless-stopped \
     --memory=768m --cpus=1.5 --cap-drop ALL --security-opt no-new-privileges \
-    --log-driver local --log-opt max-size=10m --log-opt max-file=3 \
+    --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
     --env-file "$temporary_env" -p 8080:8080 -p 9091:9091 "$1" >/dev/null
 }
 docker rm -f codeiary-api >/dev/null 2>&1 || true

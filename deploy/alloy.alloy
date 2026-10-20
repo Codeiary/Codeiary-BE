@@ -1,0 +1,26 @@
+loki.source.file "codeiary_api" {
+  targets = [{
+    __path__    = "/var/lib/docker/containers/*/*-json.log",
+    job         = "codeiary-api",
+    service     = "codeiary-api",
+    environment = "production",
+  }]
+
+  file_match {
+    enabled     = true
+    sync_period = "5s"
+  }
+
+  forward_to = [loki.process.docker.receiver]
+}
+
+loki.process "docker" {
+  stage.docker {}
+  forward_to = [loki.write.monitoring.receiver]
+}
+
+loki.write "monitoring" {
+  endpoint {
+    url = "http://172.31.14.120:3100/loki/api/v1/push"
+  }
+}

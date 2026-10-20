@@ -13,6 +13,7 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 RUN useradd --system --uid 10001 appuser
 COPY --from=build /workspace/build/libs/*.jar /app/app.jar
+COPY deploy/alloy.alloy /app/alloy.alloy
 USER appuser
 EXPOSE 8080 9091
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
