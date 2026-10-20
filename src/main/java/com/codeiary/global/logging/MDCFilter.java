@@ -20,7 +20,6 @@ public final class MDCFilter extends OncePerRequestFilter {
     private static final String TRACE_ID = "traceId";
     private static final String USER_ID = "userId";
     private static final String ANONYMOUS = "anonymous";
-    private static final String HEALTH_PATH = "/health";
 
     @Override
     protected void doFilterInternal(
@@ -34,10 +33,7 @@ public final class MDCFilter extends OncePerRequestFilter {
         MDC.put(TRACE_ID, traceId);
         MDC.put(USER_ID, currentUserId());
         response.setHeader(REQUEST_ID_HEADER, traceId);
-        boolean healthCheck = HEALTH_PATH.equals(request.getRequestURI());
-        if (!healthCheck) {
-            log.info("[API START] {}", api);
-        }
+        log.info("[API START] {}", api);
 
         try {
             chain.doFilter(request, response);
@@ -48,7 +44,7 @@ public final class MDCFilter extends OncePerRequestFilter {
                 log.error("[API END] {} status={} durationMs={}", api, status, durationMs);
             } else if (status >= 400) {
                 log.warn("[API END] {} status={} durationMs={}", api, status, durationMs);
-            } else if (!healthCheck) {
+            } else {
                 log.info("[API END] {} status={} durationMs={}", api, status, durationMs);
             }
             MDC.remove(TRACE_ID);
