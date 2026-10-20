@@ -299,7 +299,9 @@ main 반영 시 GitHub Actions가 OIDC로 AWS에 인증하고 ARM64 이미지를
 등록한 뒤 SSM `CodeiaryDeployApi`로 배포합니다. `/health` 확인에 실패하면 이전 이미지로 복구합니다.
 
 GitHub Actions 변수는 `EC2_AWS_ROLE_ARN`, `EC2_SSM_INSTANCE_ID`입니다.
-배포 스크립트 `deploy/deploy-api.sh`는 서울 리전 `/codeiary/prod/`의 `db-url`,
+배포 스크립트 `deploy/deploy-api.sh`는 애플리케이션 포트 `8080`과 Prometheus 지표 포트 `9091`을 게시합니다.
+이 스크립트 변경 후에는 EC2의 `/usr/local/sbin/codeiary-deploy-api`에도 같은 버전을 반영해야 합니다.
+스크립트는 서울 리전 `/codeiary/prod/`의 `db-url`,
 `db-username`, `db-password`, `jwt-secret`, Google OAuth 및 미디어 설정을 읽습니다.
 비밀값은 임시 환경 파일로 전달하고 배포 종료 시 파일을 삭제합니다.
 S3 업로드는 EC2 IAM 역할과 버킷 정책으로 허용하며 정적 AWS 키를 사용하지 않습니다.
