@@ -6,6 +6,7 @@ import com.codeiary.global.security.exception.SecurityErrorHandler;
 import com.codeiary.global.security.service.CustomOAuth2UserService;
 import com.codeiary.global.security.service.CustomOidcUserService;
 import com.codeiary.global.security.filter.TokenAuthenticationFilter;
+import com.codeiary.global.logging.MDCFilter;
 import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -68,6 +69,7 @@ public class SecurityConfig {
                         .anyRequest().hasAnyRole("USER", "ADMIN"))
                 .addFilterBefore(tokenFilter,
                         UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(new MDCFilter(), TokenAuthenticationFilter.class)
                 .build();
     }
 
@@ -77,6 +79,7 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
+        configuration.setExposedHeaders(List.of(MDCFilter.REQUEST_ID_HEADER));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
