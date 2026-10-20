@@ -13,6 +13,7 @@ import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.exception.CommonErrorCode;
+import com.codeiary.global.logging.LogExecution;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class CommentService {
     private final BlogPostRepository posts;
     private final CommentMapper commentMapper;
 
+    @LogExecution
     public List<CommentResponse> getComments(Long postId, User viewer) {
         findReadablePost(postId, viewer);
         return comments.findAllByTargetTypeAndTargetIdOrderByCreatedAtAscIdAsc(CommentTargetType.BLOG_POST, postId).stream()
@@ -35,6 +37,7 @@ public class CommentService {
     }
 
     @Transactional
+    @LogExecution
     public CommentResponse create(Long postId, User author, CommentCreateRequest request) {
         BlogPost post = findReadablePost(postId, author);
         Comment parent = request.parentId() == null ? null : findReplyParent(postId, request.parentId());
@@ -44,6 +47,7 @@ public class CommentService {
     }
 
     @Transactional
+    @LogExecution
     public CommentResponse update(Long postId, Long commentId, User author,
                                      CommentUpdateRequest request) {
         Comment comment = findOwnedComment(postId, commentId, author);
@@ -52,6 +56,7 @@ public class CommentService {
     }
 
     @Transactional
+    @LogExecution
     public void delete(Long postId, Long commentId, User author) {
         findOwnedComment(postId, commentId, author).delete();
     }

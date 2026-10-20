@@ -7,6 +7,7 @@ import com.codeiary.domain.blog.dto.response.BlogPostPageResponse;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.user.entity.User;
+import com.codeiary.global.logging.LogExecution;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +29,7 @@ public class BlogPostListService {
     private final BlogPostMapper postMapper;
     private final PostLikeRepository postLikes;
 
+    @LogExecution
     public BlogPostPageResponse getPublicPosts(String search, String category, String tag, BlogPostSort sort,
                                                int page, int size, User user) {
         Page<BlogPostListItemResponse> result = posts.findPublicPosts(normalize(search), normalize(category),
@@ -36,6 +38,7 @@ public class BlogPostListService {
         return toResponse(withLikes(result, user == null ? null : user.getId()));
     }
 
+    @LogExecution
     public BlogPostPageResponse getMyPosts(User user, String search, String category, String tag, int page, int size) {
         Page<BlogPostListItemResponse> result = posts.findAuthorPosts(user.getId(), normalize(search),
                         normalize(category), normalize(tag), pageable(page, size))

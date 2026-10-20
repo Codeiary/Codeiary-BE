@@ -6,6 +6,7 @@ import com.codeiary.domain.user.dto.response.NicknameAvailabilityResponse;
 import com.codeiary.domain.user.dto.response.UserProfileResponse;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.service.UserService;
+import com.codeiary.global.logging.LogExecution;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@LogExecution
 @RequestMapping("/users")
 @RequiredArgsConstructor
 @Tag(name = "사용자")

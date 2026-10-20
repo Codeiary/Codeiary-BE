@@ -5,6 +5,7 @@ import com.codeiary.domain.blog.exception.BlogErrorCode;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.user.entity.User;
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.global.exception.RestApiException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ public class PostLikeService {
     private final PostLikeRepository postLikes;
 
     @Transactional
+    @LogExecution
     public PostLikeResponse like(Long postId, User user) {
         requirePublicPost(postId);
         postLikes.addLike(postId, user.getId());
@@ -26,6 +28,7 @@ public class PostLikeService {
     }
 
     @Transactional
+    @LogExecution
     public PostLikeResponse unlike(Long postId, User user) {
         requirePublicPost(postId);
         postLikes.removeLike(postId, user.getId());
