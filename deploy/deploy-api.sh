@@ -49,7 +49,7 @@ start_container() {
   docker run -d --name codeiary-api --restart unless-stopped \
     --memory=768m --cpus=1.5 --cap-drop ALL --security-opt no-new-privileges \
     --log-driver local --log-opt max-size=10m --log-opt max-file=3 \
-    --env-file "$temporary_env" -p 8080:8080 "$1" >/dev/null
+    --env-file "$temporary_env" -p 8080:8080 -p 9091:9091 "$1" >/dev/null
 }
 docker rm -f codeiary-api >/dev/null 2>&1 || true
 if ! start_container "$IMAGE"; then
