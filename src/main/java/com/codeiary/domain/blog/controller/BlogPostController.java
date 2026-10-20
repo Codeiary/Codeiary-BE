@@ -9,6 +9,7 @@ import com.codeiary.domain.blog.service.BlogPostService;
 import com.codeiary.domain.blog.service.BlogPostListService;
 import com.codeiary.domain.blog.service.PostLikeService;
 import com.codeiary.domain.user.entity.User;
+import com.codeiary.global.logging.LogExecution;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@LogExecution
 @RequestMapping("/posts")
 @RequiredArgsConstructor
 @Tag(name = "게시글")

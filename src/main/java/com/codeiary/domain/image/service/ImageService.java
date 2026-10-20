@@ -6,6 +6,7 @@ import com.codeiary.domain.image.exception.ImageErrorCode;
 import com.codeiary.domain.image.validation.ImageUrlValidator;
 import com.codeiary.global.exception.CommonErrorCode;
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.logging.LogExecution;
 import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashMap;
@@ -38,6 +39,7 @@ public class ImageService {
     @Value("${cloud.aws.s3.public-base-url}")
     private String imageBaseUrl;
 
+    @LogExecution
     public ImageUploadResponse presign(Long userId, ImagePresignRequest request) {
         String contentType = request.contentType().trim().toLowerCase(Locale.ROOT);
         String extension = validateImage(contentType, request.contentLength());

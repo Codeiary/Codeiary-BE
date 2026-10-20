@@ -1,6 +1,7 @@
 package com.codeiary.domain.auth.controller;
 
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.cookie.TokenCookieManager;
 import com.codeiary.domain.auth.service.TokenSessionService;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@LogExecution
 @RequestMapping("/auth")
 @RequiredArgsConstructor
 public class TokenController {

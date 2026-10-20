@@ -14,6 +14,7 @@ import com.codeiary.domain.blog.repository.TagRepository;
 import com.codeiary.domain.image.validation.ImageUrlValidator;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.logging.LogExecution;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class BlogPostService {
     private final TagRepository tags;
 
     @Transactional
+    @LogExecution
     public BlogPostResponse create(User user, BlogPostRequest request) {
         BlogPostRequest normalized = normalize(request);
         Category category = resolveCategory(user, normalized.category());
@@ -41,6 +43,7 @@ public class BlogPostService {
         return postMapper.toResponse(posts.save(post));
     }
 
+    @LogExecution
     public BlogPostResponse get(Long postId, User user) {
         BlogPost post = findPost(postId);
         if (!post.isPublicPost() && !post.isWrittenBy(user)) {
@@ -51,6 +54,7 @@ public class BlogPostService {
     }
 
     @Transactional
+    @LogExecution
     public BlogPostResponse update(Long postId, User user, BlogPostRequest request) {
         BlogPost post = findOwnedPost(postId, user);
         BlogPostRequest normalized = normalize(request);
@@ -63,6 +67,7 @@ public class BlogPostService {
     }
 
     @Transactional
+    @LogExecution
     public void delete(Long postId, User user) {
         posts.delete(findOwnedPost(postId, user));
     }

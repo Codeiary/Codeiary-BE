@@ -13,6 +13,7 @@ import com.codeiary.domain.user.exception.UserErrorCode;
 import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.domain.image.validation.ImageUrlValidator;
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.global.security.exception.SecurityErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
@@ -37,6 +38,7 @@ public class UserService {
         return userMapper.toResponse(user);
     }
 
+    @LogExecution
     public UserNeighborhoodPageResponse getNeighborhood(int page, int size) {
         int safePage = Math.max(page, 0);
         int safeSize = Math.min(Math.max(size, 1), MAX_NEIGHBORHOOD_PAGE_SIZE);
@@ -45,6 +47,7 @@ public class UserService {
                 result.getTotalElements(), result.getTotalPages(), result.isFirst(), result.isLast());
     }
 
+    @LogExecution
     public PublicUserProfileResponse getPublicProfile(Long userId) {
         User user = users.findById(userId)
                 .filter(this::hasPublicProfile)
@@ -52,6 +55,7 @@ public class UserService {
         return userMapper.toPublicResponse(user);
     }
 
+    @LogExecution
     public PublicUserProfileResponse getPublicProfileByNickname(String nickname) {
         User user = users.findByNicknameIgnoreCase(validNickname(nickname))
                 .filter(this::hasPublicProfile)
@@ -65,6 +69,7 @@ public class UserService {
     }
 
     @Transactional
+    @LogExecution
     public UserProfileResponse completeOnboarding(Long userId, OnboardingRequest request) {
         User user = loadCurrentUser(userId);
         String nickname = availableNickname(userId, request.nickname());
@@ -73,6 +78,7 @@ public class UserService {
     }
 
     @Transactional
+    @LogExecution
     public UserProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {
         String profileImageUrl = optionalValue(request.profileImageUrl());
         if (profileImageUrl != null) {
