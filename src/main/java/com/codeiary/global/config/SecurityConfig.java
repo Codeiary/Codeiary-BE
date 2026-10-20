@@ -35,7 +35,8 @@ public class SecurityConfig {
             CustomOAuth2UserService oauth2UserService,
             CustomOidcUserService oidcUserService,
             CustomOauth2SuccessHandler successHandler,
-            CustomOauth2FailureHandler failureHandler
+            CustomOauth2FailureHandler failureHandler,
+            @Value("${logging.api.warn-error-only:}") List<String> warnErrorOnlyApis
     ) {
         return http
                 .cors(Customizer.withDefaults())
@@ -69,7 +70,7 @@ public class SecurityConfig {
                         .anyRequest().hasAnyRole("USER", "ADMIN"))
                 .addFilterBefore(tokenFilter,
                         UsernamePasswordAuthenticationFilter.class)
-                .addFilterAfter(new MDCFilter(), TokenAuthenticationFilter.class)
+                .addFilterBefore(new MDCFilter(warnErrorOnlyApis), TokenAuthenticationFilter.class)
                 .build();
     }
 

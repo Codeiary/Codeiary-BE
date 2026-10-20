@@ -14,6 +14,19 @@ spring:
             client-secret: ${GOOGLE_CLIENT_SECRET:local-secret}
             scope: openid,profile,email
 
+logging:
+  api:
+    warn-error-only: "GET /health"
+  structured:
+    format:
+      console: logstash
+    json:
+      rename:
+        "[@timestamp]": time
+        thread_name: thread
+        logger_name: logger
+      exclude: "@version,level_value,tags"
+
 management:
   endpoints:
     web:
