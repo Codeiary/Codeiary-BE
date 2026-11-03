@@ -16,7 +16,6 @@ import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -60,10 +59,10 @@ public class BlogPost extends TimeBaseEntity {
     @Builder(access = AccessLevel.PRIVATE)
     private BlogPost(User author, String title, String content, Category category,
                      String representativeImageUrl, boolean publicPost) {
-        this.author = Objects.requireNonNull(author);
-        this.title = Objects.requireNonNull(title);
-        this.content = Objects.requireNonNull(content);
-        this.category = Objects.requireNonNull(category);
+        this.author = author;
+        this.title = title;
+        this.content = content;
+        this.category = category;
         this.representativeImageUrl = representativeImageUrl;
         this.publicPost = publicPost;
     }
@@ -82,9 +81,9 @@ public class BlogPost extends TimeBaseEntity {
 
     public void update(String title, String content, Category category,
                        String representativeImageUrl, boolean publicPost) {
-        this.title = Objects.requireNonNull(title);
-        this.content = Objects.requireNonNull(content);
-        this.category = Objects.requireNonNull(category);
+        this.title = title;
+        this.content = content;
+        this.category = category;
         this.representativeImageUrl = representativeImageUrl;
         this.publicPost = publicPost;
         markModified();
