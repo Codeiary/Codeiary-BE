@@ -20,6 +20,7 @@ import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.hibernate.annotations.BatchSize;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -62,6 +63,7 @@ public class Portfolio extends TimeBaseEntity {
 
     @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("startOffset ASC")
+    @BatchSize(size = 100)
     private List<PortfolioTitleStyle> titleStyles = new ArrayList<>();
 
     @Builder(access = AccessLevel.PRIVATE)
@@ -85,6 +87,18 @@ public class Portfolio extends TimeBaseEntity {
                 .representativeImageUrl(representativeImageUrl)
                 .publicPortfolio(publicPortfolio)
                 .build();
+    }
+
+    public void update(Font defaultFont, String title, TextAlignment titleAlign,
+                       String representativeImageUrl, boolean publicPortfolio) {
+        this.defaultFont = defaultFont;
+        this.title = title;
+        this.titleAlign = titleAlign;
+        this.representativeImageUrl = representativeImageUrl;
+        this.publicPortfolio = publicPortfolio;
+        blocks.clear();
+        titleStyles.clear();
+        markModified();
     }
 
     public List<PortfolioBlock> getBlocks() {

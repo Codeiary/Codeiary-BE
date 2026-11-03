@@ -14,6 +14,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
+@org.hibernate.annotations.BatchSize(size = 100)
 @Table(name = "font", uniqueConstraints = @UniqueConstraint(name = "uk_font_code", columnNames = "code"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
