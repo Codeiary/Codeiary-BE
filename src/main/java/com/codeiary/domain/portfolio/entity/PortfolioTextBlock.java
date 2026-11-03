@@ -38,29 +38,26 @@ public class PortfolioTextBlock extends PortfolioBlock {
     private List<PortfolioTextStyle> styles = new ArrayList<>();
 
     @Builder(access = AccessLevel.PRIVATE)
-    private PortfolioTextBlock(Portfolio portfolio, PortfolioBlockType blockType,
-                               int sortOrder, String content, TextAlignment textAlign) {
-        super(portfolio, blockType, sortOrder);
+    private PortfolioTextBlock(Portfolio portfolio,
+                               int sortOrder, String content, TextAlignment textAlign,
+                               Double x, Double y, Double widthPx, Double heightPx) {
+        super(portfolio, PortfolioBlockType.TEXT, sortOrder, x, y, widthPx, heightPx);
         this.content = content;
         this.textAlign = textAlign;
     }
 
-    public static PortfolioTextBlock createText(Portfolio portfolio, String content, int sortOrder) {
-        return create(portfolio, PortfolioBlockType.TEXT, content, sortOrder);
-    }
-
-    public static PortfolioTextBlock createTitle(Portfolio portfolio, String content, int sortOrder) {
-        return create(portfolio, PortfolioBlockType.TITLE, content, sortOrder);
-    }
-
-    private static PortfolioTextBlock create(Portfolio portfolio, PortfolioBlockType type,
-                                              String content, int sortOrder) {
+    public static PortfolioTextBlock create(Portfolio portfolio,
+                                            String content, TextAlignment textAlign, int sortOrder,
+                                            Double x, Double y, Double widthPx, Double heightPx) {
         PortfolioTextBlock block = PortfolioTextBlock.builder()
                 .portfolio(portfolio)
-                .blockType(type)
                 .sortOrder(sortOrder)
                 .content(content)
-                .textAlign(TextAlignment.LEFT)
+                .textAlign(textAlign)
+                .x(x)
+                .y(y)
+                .widthPx(widthPx)
+                .heightPx(heightPx)
                 .build();
         portfolio.addBlock(block);
         return block;
