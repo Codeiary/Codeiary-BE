@@ -15,7 +15,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
-import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -70,7 +69,7 @@ public class User extends TimeBaseEntity {
     private User(String email, String name, Role role, OAuthProvider oauthProvider, String oauthSubject) {
         this.email = email;
         this.name = name;
-        this.role = Objects.requireNonNull(role);
+        this.role = role;
         this.oauthProvider = oauthProvider;
         this.oauthSubject = oauthSubject;
     }

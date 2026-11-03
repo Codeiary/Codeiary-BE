@@ -14,7 +14,6 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
-import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -53,11 +52,11 @@ public class Comment extends TimeBaseEntity {
 
     @Builder(access = AccessLevel.PRIVATE)
     private Comment(CommentTargetType targetType, Long targetId, User author, Comment parent, String content) {
-        this.targetType = Objects.requireNonNull(targetType);
-        this.targetId = Objects.requireNonNull(targetId);
-        this.author = Objects.requireNonNull(author);
+        this.targetType = targetType;
+        this.targetId = targetId;
+        this.author = author;
         this.parent = parent;
-        this.content = Objects.requireNonNull(content);
+        this.content = content;
     }
 
     public static Comment create(CommentTargetType targetType, Long targetId, User author,
@@ -84,7 +83,7 @@ public class Comment extends TimeBaseEntity {
     }
 
     public void update(String content) {
-        this.content = Objects.requireNonNull(content);
+        this.content = content;
         markModified();
     }
 
