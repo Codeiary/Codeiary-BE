@@ -11,7 +11,7 @@ import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 
-public record PortfolioCreateRequest(
+public record PortfolioRequest(
         @NotBlank @Size(max = 200) String title,
         TextAlignment titleAlign,
         List<@NotNull @Valid PortfolioTextStyleRequest> titleStyles,
@@ -20,7 +20,7 @@ public record PortfolioCreateRequest(
         @NotNull Boolean publicPortfolio,
         @NotEmpty List<@NotNull @Valid PortfolioBlockRequest> blocks
 ) {
-    public PortfolioCreateRequest {
+    public PortfolioRequest {
         titleAlign = titleAlign == null ? TextAlignment.LEFT : titleAlign;
         titleStyles = titleStyles == null ? List.of() : titleStyles;
     }

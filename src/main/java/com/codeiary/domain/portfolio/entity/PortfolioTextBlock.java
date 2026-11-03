@@ -14,6 +14,7 @@ import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.hibernate.annotations.BatchSize;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -35,6 +36,7 @@ public class PortfolioTextBlock extends PortfolioBlock {
 
     @OneToMany(mappedBy = "textBlock", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("startOffset ASC")
+    @BatchSize(size = 100)
     private List<PortfolioTextStyle> styles = new ArrayList<>();
 
     @Builder(access = AccessLevel.PRIVATE)

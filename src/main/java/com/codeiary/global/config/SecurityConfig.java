@@ -63,6 +63,8 @@ public class SecurityConfig {
                         .requestMatchers("/admin", "/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/users/me", "/users/nickname-availability").authenticated()
                         .requestMatchers(HttpMethod.GET, "/posts/mine").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/portfolios/mine", "/portfolios/fonts").hasAnyRole("USER", "ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/portfolios", "/portfolios/*").permitAll()
                         .requestMatchers(HttpMethod.POST, "/users/me/onboarding").authenticated()
                         .requestMatchers(HttpMethod.GET, "/posts/**", "/users/**",
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()

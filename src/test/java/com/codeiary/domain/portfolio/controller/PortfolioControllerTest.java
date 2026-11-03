@@ -34,6 +34,9 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -48,6 +51,146 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     @Autowired private PortfolioRepository portfolios;
     @Autowired private JwtTokenProvider tokens;
     @Autowired private EntityManager entityManager;
+
+    @Test
+    @DisplayName("수정은 ID·작성자를 유지하고 이전 블록·서식을 교체하며 삭제 시 자식만 함께 제거한다")
+    void updateAndDeletePortfolio() throws Exception {
+        User owner = users.saveAndFlush(UserFixture.create(Role.USER));
+        Font font = fonts.findAll().getFirst();
+        Portfolio portfolio = Portfolio.create(owner, font, "기존", TextAlignment.LEFT, "https://img.example.com/cover.png", false);
+        var titleStyle = com.codeiary.domain.portfolio.entity.PortfolioTitleStyle.create(portfolio, font, 0, 2, 36.0, "#112233");
+        PortfolioTextBlock text = PortfolioTextBlock.create(portfolio, "기존 본문", TextAlignment.LEFT, 0, 0.0, 0.0, 500.0, 100.0);
+        var textStyle = com.codeiary.domain.portfolio.entity.PortfolioTextStyle.create(text, font, 0, 2, 20.0, "#112233");
+        PortfolioImageBlock image = PortfolioImageBlock.create(portfolio, "https://img.example.com/old.png", "", 1, 0.0, 150.0, 300.0, 200.0);
+        Long id = portfolios.saveAndFlush(portfolio).getId();
+        Long oldText = text.getId(), oldImage = image.getId(), oldTitleStyle = titleStyle.getId(), oldTextStyle = textStyle.getId();
+        entityManager.clear();
+        var createdAt = portfolios.findById(id).orElseThrow().getCreatedAt();
+        String request = """
+                {"title":"수정된 제목","titleAlign":"RIGHT","defaultFontId":%d,"publicPortfolio":true,
+                 "titleStyles":[{"startOffset":0,"endOffset":2,"fontSize":40}],
+                 "blocks":[
+                   {"type":"IMAGE","imageUrl":"https://img.example.com/new.png","x":10,"y":20,"widthPx":200,"heightPx":100},
+                   {"type":"TEXT","content":"새 본문","textAlign":"CENTER","x":20,"y":150,"widthPx":500,"heightPx":80,
+                    "styles":[{"startOffset":0,"endOffset":1,"fontSize":24,"textColor":"#336699"}]}]}
+                """.formatted(font.getId());
+        mockMvc.perform(put("/portfolios/{id}", id).cookie(accessCookie(owner))
+                        .contentType(MediaType.APPLICATION_JSON).content(request)).andExpect(status().isNoContent());
+        entityManager.flush();
+        entityManager.createNativeQuery("SET CONSTRAINTS ALL IMMEDIATE").executeUpdate();
+        entityManager.clear();
+        Portfolio updated = portfolios.findById(id).orElseThrow();
+        assertThat(updated.getTitle()).isEqualTo("수정된 제목");
+        assertThat(updated.getAuthor().getId()).isEqualTo(owner.getId());
+        assertThat(updated.getCreatedAt()).isEqualTo(createdAt);
+        assertThat(updated.isPublicPortfolio()).isTrue();
+        assertThat(updated.getRepresentativeImageUrl()).isNull();
+        assertThat(updated.getTitleStyles()).hasSize(1);
+        assertThat(updated.getBlocks()).extracting(PortfolioBlock::getBlockType)
+                .containsExactly(PortfolioBlockType.IMAGE, PortfolioBlockType.TEXT);
+        assertThat(((PortfolioTextBlock) updated.getBlocks().get(1)).getStyles().getFirst().getFontSize()).isEqualTo(24.0);
+        assertThat(entityManager.find(PortfolioBlock.class, oldText)).isNull();
+        assertThat(entityManager.find(PortfolioBlock.class, oldImage)).isNull();
+        assertThat(entityManager.find(com.codeiary.domain.portfolio.entity.PortfolioTitleStyle.class, oldTitleStyle)).isNull();
+        assertThat(entityManager.find(com.codeiary.domain.portfolio.entity.PortfolioTextStyle.class, oldTextStyle)).isNull();
+        var blockIds = updated.getBlocks().stream().map(PortfolioBlock::getId).toList();
+        Long newTitleStyle = updated.getTitleStyles().getFirst().getId();
+        Long newTextStyle = ((PortfolioTextBlock) updated.getBlocks().get(1)).getStyles().getFirst().getId();
+        mockMvc.perform(delete("/portfolios/{id}", id).cookie(accessCookie(owner))).andExpect(status().isNoContent());
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(portfolios.existsById(id)).isFalse();
+        blockIds.forEach(blockId -> assertThat(entityManager.find(PortfolioBlock.class, blockId)).isNull());
+        assertThat(entityManager.find(com.codeiary.domain.portfolio.entity.PortfolioTitleStyle.class, newTitleStyle)).isNull();
+        assertThat(entityManager.find(com.codeiary.domain.portfolio.entity.PortfolioTextStyle.class, newTextStyle)).isNull();
+        assertThat(fonts.existsById(font.getId())).isTrue();
+        assertThat(users.existsById(owner.getId())).isTrue();
+    }
+
+    @Test
+    @DisplayName("미인증·타인·잘못된 수정 요청을 거절하고 기존 문서를 유지한다")
+    void rejectUnauthorizedAndInvalidMutations() throws Exception {
+        User owner = users.saveAndFlush(UserFixture.create(Role.USER));
+        User other = users.saveAndFlush(User.create("other@example.com", "다른사용자", Role.USER));
+        Font font = fonts.findAll().getFirst();
+        Long publicId = portfolios.saveAndFlush(Portfolio.create(owner, font, "공개 원본", TextAlignment.LEFT, null, true)).getId();
+        Long privateId = portfolios.saveAndFlush(Portfolio.create(owner, font, "비공개 원본", TextAlignment.LEFT, null, false)).getId();
+        String request = validRequest(font.getId());
+        mockMvc.perform(put("/portfolios/{id}", publicId).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/portfolios/{id}", publicId)).andExpect(status().isUnauthorized());
+        mockMvc.perform(put("/portfolios/{id}", publicId).cookie(accessCookie(other)).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/portfolios/{id}", publicId).cookie(accessCookie(other))).andExpect(status().isForbidden());
+        mockMvc.perform(put("/portfolios/{id}", privateId).cookie(accessCookie(other)).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/portfolios/{id}", privateId).cookie(accessCookie(other))).andExpect(status().isNotFound());
+        mockMvc.perform(put("/portfolios/{id}", publicId).cookie(accessCookie(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(request.replace("\"widthPx\":600", "\"widthPx\":0"))).andExpect(status().isBadRequest());
+        mockMvc.perform(put("/portfolios/{id}", publicId).cookie(accessCookie(owner)).contentType(MediaType.APPLICATION_JSON)
+                        .content(validRequest(Long.MAX_VALUE))).andExpect(status().isBadRequest());
+        assertThat(portfolios.findById(publicId).orElseThrow().getTitle()).isEqualTo("공개 원본");
+        assertThat(portfolios.existsById(privateId)).isTrue();
+    }
+
+    @Test
+    @DisplayName("상세 조회는 서식과 블록을 복원하고 비공개 문서는 작성자에게만 공개한다")
+    void readDetailAndProtectPrivatePortfolio() throws Exception {
+        User owner = users.saveAndFlush(UserFixture.create(Role.USER));
+        User other = users.saveAndFlush(User.create("other@example.com", "다른사용자", Role.USER));
+        Font font = fonts.findAll().getFirst();
+        Portfolio portfolio = Portfolio.create(owner, font, "소개", TextAlignment.CENTER, null, false);
+        com.codeiary.domain.portfolio.entity.PortfolioTitleStyle.create(portfolio, font, 0, 2, 36.0, "#112233");
+        PortfolioTextBlock text = PortfolioTextBlock.create(portfolio, "**본문**", TextAlignment.RIGHT, 0, 10.0, 20.0, 500.0, 100.0);
+        com.codeiary.domain.portfolio.entity.PortfolioTextStyle.create(text, font, 2, 4, 22.0, "#336699");
+        PortfolioImageBlock.create(portfolio, "https://img.example.com/image.png", "그림", 1, 0.0, 150.0, 400.0, 200.0);
+        Long id = portfolios.saveAndFlush(portfolio).getId();
+        entityManager.clear();
+        mockMvc.perform(get("/portfolios/{id}", id).cookie(accessCookie(owner)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("소개"))
+                .andExpect(jsonPath("$.titleStyles[0].fontCode").value(font.getCode()))
+                .andExpect(jsonPath("$.blocks[0].content").value("**본문**"))
+                .andExpect(jsonPath("$.blocks[0].styles[0].fontSize").value(22.0))
+                .andExpect(jsonPath("$.blocks[0].widthPx").value(500.0))
+                .andExpect(jsonPath("$.blocks[1].type").value("IMAGE"));
+        mockMvc.perform(get("/portfolios/{id}", id)).andExpect(status().isNotFound());
+        mockMvc.perform(get("/portfolios/{id}", id).cookie(accessCookie(other))).andExpect(status().isNotFound());
+        mockMvc.perform(get("/portfolios/{id}", Long.MAX_VALUE)).andExpect(status().isNotFound());
+        Portfolio published = portfolios.saveAndFlush(Portfolio.create(owner, font, "공개", TextAlignment.LEFT, null, true));
+        mockMvc.perform(get("/portfolios/{id}", published.getId())).andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("공개 목록과 내 목록을 분리하고 제목 검색 및 최신순 페이지네이션을 제공한다")
+    void listPublicAndMine() throws Exception {
+        User owner = users.saveAndFlush(UserFixture.create(Role.USER));
+        User other = users.saveAndFlush(User.create("other@example.com", "다른사용자", Role.USER));
+        Font font = fonts.findAll().getFirst();
+        Portfolio first = portfolios.saveAndFlush(Portfolio.create(owner, font, "개발 100%", TextAlignment.LEFT, null, true));
+        Portfolio second = portfolios.saveAndFlush(Portfolio.create(owner, font, "개발 두번째", TextAlignment.LEFT, null, true));
+        Portfolio hidden = portfolios.saveAndFlush(Portfolio.create(owner, font, "개발 비공개", TextAlignment.LEFT, null, false));
+        portfolios.saveAndFlush(Portfolio.create(other, font, "다른 작성자", TextAlignment.LEFT, null, false));
+        entityManager.clear();
+        mockMvc.perform(get("/portfolios").param("size", "1").param("search", "개발"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(2))
+                .andExpect(jsonPath("$.totalPages").value(2))
+                .andExpect(jsonPath("$.content[0].id").value(second.getId()))
+                .andExpect(jsonPath("$.content[0].blocks").doesNotExist());
+        mockMvc.perform(get("/portfolios").param("size", "1").param("page", "1").param("search", "개발"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.content[0].id").value(first.getId()));
+        mockMvc.perform(get("/portfolios").param("search", "%"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(1));
+        mockMvc.perform(get("/portfolios").param("authorId", other.getId().toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(0));
+        mockMvc.perform(get("/portfolios/mine").cookie(accessCookie(owner)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElements").value(3))
+                .andExpect(jsonPath("$.content[0].id").value(hidden.getId()));
+        mockMvc.perform(get("/portfolios/mine")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/portfolios/fonts")).andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/portfolios").param("page", "-1").param("size", "999"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.page").value(0)).andExpect(jsonPath("$.size").value(50));
+    }
 
     @Test
     @DisplayName("로그인한 사용자의 포트폴리오와 블록·좌표·정렬·서식을 함께 저장한다.")

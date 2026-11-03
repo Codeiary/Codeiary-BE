@@ -1,17 +1,13 @@
 package com.codeiary.domain.portfolio.service;
 
 import com.codeiary.domain.image.validation.ImageUrlValidator;
-import com.codeiary.domain.portfolio.dto.request.PortfolioBlockRequest;
-import com.codeiary.domain.portfolio.dto.request.PortfolioCreateRequest;
-import com.codeiary.domain.portfolio.dto.request.PortfolioTextStyleRequest;
+import com.codeiary.domain.portfolio.dto.PortfolioMapper;
+import com.codeiary.domain.portfolio.dto.request.PortfolioRequest;
 import com.codeiary.domain.portfolio.dto.response.PortfolioCreateResponse;
+import com.codeiary.domain.portfolio.dto.response.PortfolioResponse;
 import com.codeiary.domain.portfolio.dto.response.PortfolioFontResponse;
 import com.codeiary.domain.portfolio.entity.Font;
 import com.codeiary.domain.portfolio.entity.Portfolio;
-import com.codeiary.domain.portfolio.entity.PortfolioImageBlock;
-import com.codeiary.domain.portfolio.entity.PortfolioTextBlock;
-import com.codeiary.domain.portfolio.entity.PortfolioTextStyle;
-import com.codeiary.domain.portfolio.entity.PortfolioTitleStyle;
 import com.codeiary.domain.portfolio.entity.enums.PortfolioBlockType;
 import com.codeiary.domain.portfolio.exception.PortfolioErrorCode;
 import com.codeiary.domain.portfolio.repository.FontRepository;
@@ -37,36 +33,69 @@ public class PortfolioService {
     private final PortfolioRepository portfolios;
     private final FontRepository fonts;
     private final ImageUrlValidator imageUrls;
+    private final PortfolioMapper mapper;
+
+    @Transactional(readOnly = true)
+    @LogExecution
+    public PortfolioResponse get(Long id, User user) {
+        Portfolio portfolio = findPortfolio(id);
+        if (!portfolio.isPublicPortfolio() && !portfolio.isWrittenBy(user)) {
+            throw new RestApiException(PortfolioErrorCode.PORTFOLIO_NOT_FOUND);
+        }
+        return mapper.toResponse(portfolio);
+    }
 
     @Transactional(readOnly = true)
     public List<PortfolioFontResponse> getFonts() {
-        return fonts.findAllByEnabledTrueOrderByIdAsc().stream()
-                .map(font -> new PortfolioFontResponse(font.getId(), font.getCode())).toList();
+        return fonts.findAllByEnabledTrueOrderByIdAsc().stream().map(mapper::toFontResponse).toList();
     }
 
     @Transactional
     @LogExecution
-    public PortfolioCreateResponse create(User user, PortfolioCreateRequest request) {
+    public PortfolioCreateResponse create(User user, PortfolioRequest request) {
         Map<Long, Font> availableFonts = resolveFonts(request);
-        String imageUrl = request.representativeImageUrl();
-        if (StringUtils.hasText(imageUrl)) {
-            imageUrls.validate(imageUrl);
-        } else {
-            imageUrl = null;
-        }
-        Portfolio portfolio = Portfolio.create(user, availableFonts.get(request.defaultFontId()),
-                request.title(), request.titleAlign(), imageUrl, request.publicPortfolio());
-        for (PortfolioTextStyleRequest style : request.titleStyles()) {
-            PortfolioTitleStyle.create(portfolio, availableFonts.get(style.fontId()),
-                    style.startOffset(), style.endOffset(), style.fontSize(), style.textColor());
-        }
-        for (int index = 0; index < request.blocks().size(); index++) {
-            addBlock(portfolio, request.blocks().get(index), index, availableFonts);
-        }
-        return new PortfolioCreateResponse(portfolios.save(portfolio).getId());
+        validateImages(request);
+        return mapper.toCreateResponse(portfolios.save(mapper.toEntity(request, user, availableFonts)));
     }
 
-    private Map<Long, Font> resolveFonts(PortfolioCreateRequest request) {
+    @Transactional
+    @LogExecution
+    public void update(Long id, User user, PortfolioRequest request) {
+        Portfolio portfolio = findOwnedPortfolio(id, user);
+        Map<Long, Font> availableFonts = resolveFonts(request);
+        validateImages(request);
+        mapper.updateEntity(request, portfolio, availableFonts);
+    }
+
+    @Transactional
+    @LogExecution
+    public void delete(Long id, User user) {
+        portfolios.delete(findOwnedPortfolio(id, user));
+    }
+
+    private Portfolio findPortfolio(Long id) {
+        return portfolios.findById(id)
+                .orElseThrow(() -> new RestApiException(PortfolioErrorCode.PORTFOLIO_NOT_FOUND));
+    }
+
+    private Portfolio findOwnedPortfolio(Long id, User user) {
+        Portfolio portfolio = findPortfolio(id);
+        if (!portfolio.isWrittenBy(user)) {
+            throw new RestApiException(portfolio.isPublicPortfolio()
+                    ? PortfolioErrorCode.PORTFOLIO_ACCESS_DENIED : PortfolioErrorCode.PORTFOLIO_NOT_FOUND);
+        }
+        return portfolio;
+    }
+
+    private void validateImages(PortfolioRequest request) {
+        if (StringUtils.hasText(request.representativeImageUrl())) {
+            imageUrls.validate(request.representativeImageUrl());
+        }
+        request.blocks().stream().filter(block -> block.type() == PortfolioBlockType.IMAGE)
+                .forEach(block -> imageUrls.validate(block.imageUrl()));
+    }
+
+    private Map<Long, Font> resolveFonts(PortfolioRequest request) {
         var ids = new HashSet<Long>();
         ids.add(request.defaultFontId());
         Stream.concat(request.titleStyles().stream(),
@@ -85,23 +114,4 @@ public class PortfolioService {
         return available;
     }
 
-    private void addBlock(Portfolio portfolio, PortfolioBlockRequest request, int order, Map<Long, Font> availableFonts) {
-        if (request.type() == PortfolioBlockType.IMAGE) {
-            imageUrls.validate(request.imageUrl());
-            PortfolioImageBlock.create(portfolio, request.imageUrl(), request.imageAlt(), order,
-                    request.x(), request.y(), request.widthPx(), request.heightPx());
-            return;
-        }
-        PortfolioTextBlock text = PortfolioTextBlock.create(portfolio, request.content(),
-                request.textAlign(), order,
-                request.x(), request.y(), request.widthPx(), request.heightPx());
-        addStyles(text, request.styles(), availableFonts);
-    }
-
-    private void addStyles(PortfolioTextBlock text, List<PortfolioTextStyleRequest> styles, Map<Long, Font> availableFonts) {
-        for (PortfolioTextStyleRequest style : styles) {
-            PortfolioTextStyle.create(text, availableFonts.get(style.fontId()), style.startOffset(),
-                    style.endOffset(), style.fontSize(), style.textColor());
-        }
-    }
 }
