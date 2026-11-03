@@ -43,17 +43,26 @@ public abstract class PortfolioBlock extends TimeBaseEntity {
     @Column(nullable = false)
     private int sortOrder;
 
+    @Column(nullable = false)
     private Double x;
 
+    @Column(nullable = false)
     private Double y;
 
+    @Column(nullable = false)
     private Double widthPx;
 
+    @Column(nullable = false)
     private Double heightPx;
 
-    protected PortfolioBlock(Portfolio portfolio, PortfolioBlockType blockType, int sortOrder) {
+    protected PortfolioBlock(Portfolio portfolio, PortfolioBlockType blockType, int sortOrder,
+                             Double x, Double y, Double widthPx, Double heightPx) {
         this.portfolio = portfolio;
         this.blockType = blockType;
         this.sortOrder = sortOrder;
+        this.x = x;
+        this.y = y;
+        this.widthPx = widthPx;
+        this.heightPx = heightPx;
     }
 }

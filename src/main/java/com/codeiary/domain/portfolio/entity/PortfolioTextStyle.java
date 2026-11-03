@@ -9,9 +9,6 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import jakarta.validation.constraints.DecimalMax;
-import jakarta.validation.constraints.DecimalMin;
-import jakarta.validation.constraints.Pattern;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -41,12 +38,9 @@ public class PortfolioTextStyle {
     @Column(nullable = false)
     private int endOffset;
 
-    @DecimalMin("10")
-    @DecimalMax("96")
     private Double fontSize;
 
     @Column(length = 7)
-    @Pattern(regexp = "#[0-9a-fA-F]{6}")
     private String textColor;
 
     @Builder(access = AccessLevel.PRIVATE)
