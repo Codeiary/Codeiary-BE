@@ -15,6 +15,8 @@ import com.codeiary.domain.image.validation.ImageUrlValidator;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.logging.LogExecution;
 import com.codeiary.global.security.exception.SecurityErrorCode;
+import java.util.Locale;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -29,6 +31,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserService {
 
     private static final int MAX_NEIGHBORHOOD_PAGE_SIZE = 100;
+    private static final Set<String> RESERVED_NICKNAMES = Set.of("admin", "assets", "auth", "blog", "healthz", "home",
+            "login", "news", "onboarding", "portfolio", "write");
 
     private final UserRepository users;
     private final UserMapper userMapper;
@@ -64,8 +68,9 @@ public class UserService {
     }
 
     public NicknameAvailabilityResponse checkNickname(Long userId, String nickname) {
-        return new NicknameAvailabilityResponse(
-                !users.existsByNicknameIgnoreCaseAndIdNot(validNickname(nickname), userId));
+        String normalized = validNickname(nickname);
+        return new NicknameAvailabilityResponse(!RESERVED_NICKNAMES.contains(normalized.toLowerCase(Locale.ROOT))
+                && !users.existsByNicknameIgnoreCaseAndIdNot(normalized, userId));
     }
 
     @Transactional
@@ -110,6 +115,9 @@ public class UserService {
 
     private String availableNickname(Long userId, String value) {
         String nickname = validNickname(value);
+        if (RESERVED_NICKNAMES.contains(nickname.toLowerCase(Locale.ROOT))) {
+            throw new RestApiException(UserErrorCode.INVALID_NICKNAME);
+        }
         if (users.existsByNicknameIgnoreCaseAndIdNot(nickname, userId)) {
             throw new RestApiException(UserErrorCode.NICKNAME_TAKEN);
         }
