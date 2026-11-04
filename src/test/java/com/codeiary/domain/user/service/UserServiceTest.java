@@ -52,6 +52,18 @@ class UserServiceTest {
         service = new UserService(users, Mappers.getMapper(UserMapper.class), imageUrls);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"blog", "Portfolio", "ADMIN"})
+    @DisplayName("서비스 경로와 충돌하는 닉네임은 사용할 수 없다")
+    void rejectReservedNickname(String nickname) {
+        assertThat(service.checkNickname(UserFixture.ID, nickname).available()).isFalse();
+        User user = UserFixture.createWithId(Role.PENDING);
+        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+        assertThatThrownBy(() -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest(nickname)))
+                .isInstanceOf(RestApiException.class);
+        then(users).should(never()).saveAndFlush(any());
+    }
+
     @Test
     @DisplayName("닉네임으로 온보딩을 완료하고 USER 권한을 부여할 수 있다.")
     void completeOnboarding() {
