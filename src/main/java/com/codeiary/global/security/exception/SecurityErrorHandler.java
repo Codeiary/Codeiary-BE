@@ -1,6 +1,8 @@
 package com.codeiary.global.security.exception;
 
 import com.codeiary.global.exception.dto.response.ErrorResponse;
+import com.codeiary.global.exception.RestApiException;
+import com.codeiary.domain.github.exception.GitHubErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -53,8 +55,12 @@ public class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDen
 
     public void handleOAuthFailure(HttpServletRequest request, HttpServletResponse response,
             Exception exception) throws IOException {
+        boolean repositoryFailure = exception instanceof RestApiException error
+                && error.getErrorCode() instanceof GitHubErrorCode code
+                && code != GitHubErrorCode.INVALID_GITHUB_LINK
+                && code != GitHubErrorCode.GITHUB_ACCOUNT_CONFLICT;
         String redirectUrl = UriComponentsBuilder.fromUriString(redirectHome)
-                .queryParam("error", "oauth2")
+                .queryParam("error", repositoryFailure ? "github_repository" : "oauth2")
                 .build()
                 .toUriString();
         response.sendRedirect(redirectUrl);

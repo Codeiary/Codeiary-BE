@@ -51,4 +51,12 @@ public class GitHubConnection extends TimeBaseEntity {
     public void connect(String login) {
         githubLogin = login;
     }
+
+    public void connectRepository(Long installationId, Long repositoryId, String owner, String name, String branch) {
+        this.installationId = installationId;
+        this.repositoryId = repositoryId;
+        this.repositoryOwner = owner;
+        this.repositoryName = name;
+        this.branch = branch;
+    }
 }

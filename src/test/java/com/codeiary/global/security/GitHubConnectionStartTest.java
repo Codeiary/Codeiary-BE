@@ -43,6 +43,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Transactional
 class GitHubConnectionStartTest extends IntegrationTestSupport {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    com.codeiary.domain.github.service.GitHubRepositoryService githubRepositories;
     @Autowired MockMvc mvc;
     @Autowired UserRepository users;
     @Autowired TokenSessionService sessions;
@@ -110,6 +112,7 @@ class GitHubConnectionStartTest extends IntegrationTestSupport {
         var saved = connections.findByUserId(user.getId()).orElseThrow();
         assertThat(saved.getGithubUserId()).isEqualTo(123L);
         assertThat(saved.getGithubLogin()).isEqualTo("octocat");
+        org.mockito.Mockito.verify(githubRepositories).prepare(user.getId());
         assertThat(response.getCookies()).isEmpty();
         assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/auth/callback");
         assertThat(users.count()).isEqualTo(userCount);
@@ -130,6 +133,22 @@ class GitHubConnectionStartTest extends IntegrationTestSupport {
         assertThat(response.getCookie("refresh_token")).isNotNull();
         assertThat(sessions.authenticate(access.getValue()).getEmail()).isEqualTo("google-regression@gmail.com");
         assertThat(connections.count()).isZero();
+    }
+
+    @Test
+    void repositoryCreationFailureKeepsLinkedAccountAndReturnsRepositoryError() throws Exception {
+        var user = users.saveAndFlush(UserFixture.create(Role.USER));
+        var callback = new MockHttpServletRequest();
+        callback.setAttribute(OAuth2RequestRepository.COMPLETED_REQUEST,
+                authorization(new GitHubLinkContext(user.getId(), Instant.now())));
+        org.mockito.Mockito.doThrow(new RestApiException(
+                com.codeiary.domain.github.exception.GitHubErrorCode.GITHUB_APP_INSTALLATION_REQUIRED))
+                .when(githubRepositories).prepare(user.getId());
+        var response = new MockHttpServletResponse();
+        successHandler.onAuthenticationSuccess(callback, response, githubAuthentication());
+        assertThat(connections.findByUserId(user.getId())).isPresent();
+        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/auth/callback?error=github_repository");
+        assertThat(response.getCookies()).isEmpty();
     }
 
     @Test

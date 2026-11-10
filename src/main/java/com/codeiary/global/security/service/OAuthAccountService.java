@@ -10,6 +10,7 @@ import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.service.TokenSessionService;
 import com.codeiary.domain.github.dto.GitHubLinkContext;
 import com.codeiary.domain.github.service.GitHubConnectionService;
+import com.codeiary.domain.github.service.GitHubRepositoryService;
 import com.codeiary.domain.user.entity.enums.OAuthProvider;
 import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
 import org.springframework.security.core.Authentication;
@@ -21,7 +22,8 @@ import lombok.RequiredArgsConstructor;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -31,8 +33,9 @@ public class OAuthAccountService {
     private final UserRepository users;
     private final TokenSessionService sessions;
     private final GitHubConnectionService githubConnections;
+    private final GitHubRepositoryService githubRepositories;
+    private final PlatformTransactionManager transactions;
 
-    @Transactional
     @LogExecution
     public Optional<TokenPair> complete(Authentication authentication, OAuth2AuthorizationRequest authorization) {
         if (!(authentication.getPrincipal() instanceof CustomOAuth2User user)) {
@@ -40,12 +43,14 @@ public class OAuthAccountService {
         }
         var profile = user.getAuthInfo();
         if (profile.provider() == OAuthProvider.GOOGLE) {
-            return Optional.of(sessions.createSession(getOrCreate(profile).getEmail()));
+            return new TransactionTemplate(transactions).execute(status ->
+                    Optional.of(sessions.createSession(getOrCreate(profile).getEmail())));
         }
         if (profile.provider() == OAuthProvider.GITHUB) {
             GitHubLinkContext context = authorization == null ? null
                     : authorization.getAttribute(GitHubLinkContext.ATTRIBUTE);
             githubConnections.connect(profile, context);
+            githubRepositories.prepare(context.userId());
             return Optional.empty();
         }
         throw new RestApiException(SecurityErrorCode.UNAUTHORIZED);
