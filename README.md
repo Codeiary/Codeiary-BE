@@ -204,6 +204,8 @@ flowchart TD
     Account -->|GitHub| Link["GitHubConnectionService<br/>기존 사용자와 GitHub 계정 연결"]
     Login --> DB[(PostgreSQL)]
     Link --> DB
+    Link --> Repository["GitHubRepositoryService<br/>CodeiaryBlog 자동 생성 · 설치 권한 확인"]
+    Repository --> DB
     Handler --> Frontend["프론트 /auth/callback으로 복귀"]
 ```
 
@@ -269,7 +271,11 @@ sequenceDiagram
     GitHub-->>API: GitHub 사용자 ID · login
     API->>API: CustomOAuth2UserService → GitHubOAuth2Response
     API->>API: OAuthAccountService.complete → GitHubConnectionService.connect
-    API->>DB: 사용자 행 잠금 · 활성 상태 확인 · 계정 연결 저장
+    API->>DB: 사용자 행 잠금 · 활성 상태 확인 · 계정 연결 커밋
+    API->>GitHub: 내 CodeiaryBlog 조회 · 없으면 비공개 저장소 생성
+    GitHub-->>API: 저장소 ID · 이름 · 기본 브랜치
+    API->>GitHub: 앱 설치 및 저장소 쓰기 권한 확인
+    API->>DB: 연결 ID 재확인 · 저장소 정보 저장
     API-->>Browser: 프론트 /auth/callback 이동 (서비스 JWT 추가 발급 없음)
 ```
 
@@ -286,14 +292,57 @@ GitHub 계정의 식별에는 변경 가능한 `login` 대신 숫자 사용자 I
 
 | 메서드 | 경로 | 동작 |
 | --- | --- | --- |
-| GET | `/github/connection` | 내 연동 여부와 GitHub 아이디 조회 |
+| GET | `/github/connection` | 계정·CodeiaryBlog 연결 정보 조회 |
 | DELETE | `/github/connection` | 내 연결 정보와 Spring Authorized Client 삭제 |
 
-계정 연결만 구현된 상태이며 App 설치·저장소 선택·글 동기화는 포함하지 않습니다.
-연동·해제는 같은 사용자 행 잠금을 사용합니다. 연동 해제는 Codeiary 내부의 연결을 삭제하며,
-GitHub 사이트에 남은 앱 승인 권한을 철회하지는 않습니다.
-GitHub 설정에는 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`을 사용합니다.
-OAuth 콜백 실패는 `SecurityErrorHandler`가 프론트 `/auth/callback?error=oauth2`로 돌려보냅니다.
+GitHub OAuth 인증을 마치면 백엔드가 바로 개인 계정의 **CodeiaryBlog** 저장소를 준비합니다.
+이름을 입력하거나 저장소 목록에서 선택하는 단계는 없습니다.
+
+1. Spring OAuth에서 이미 검증한 GitHub 숫자 ID와 현재 로그인명을 재사용합니다. `/user`를 다시 조회하지 않습니다.
+2. `/repos/{현재 로그인명}/CodeiaryBlog`이 있으면 재사용합니다.
+3. 없다면 `POST /user/repos`로 비공개(`private: true`) 저장소를 README와 함께 생성합니다.
+4. 앱 설치 목록을 순차 조회해 저장소 소유자·이름·상태와 Contents 쓰기 권한을 확인합니다.
+   해당 설치에서 저장소에 실제로 쓸 수 있는지 검증한 뒤 연결 정보를 저장합니다.
+
+외부 HTTP 호출은 기존 RestClient로 순차 처리합니다. OAuth에서 받은 사용자 정보를 재사용해 중복 조회를 제거합니다.
+외부 요청이 실패하면 원래 도메인 오류로 전달하고 저장소 연결을 저장하지 않습니다.
+저장소 생성 자체는 GitHub의 원격 작업이므로 다른 조회가 실패해도 생성된 저장소는 남을 수 있고,
+다음 OAuth 시도에서 동일 저장소를 재사용합니다.
+
+기존 저장소의 파일·공개 설정은 변경하지 않습니다. 생성이 겹쳐 422가 반환되면 한 번 다시 조회하며,
+접근할 수 없는 동명 저장소를 덮어쓰거나 이름을 바꿔 추가 생성하지 않습니다.
+계정 연결은 먼저 커밋하고 외부 GitHub API를 호출하므로 원격 호출 동안 DB 행 잠금을 잡지 않습니다.
+마지막 저장 시에는 연결 ID와 GitHub 사용자 ID를 다시 확인해 중간에 해제·재연동된 연결을 덮어쓰지 않습니다.
+
+앱에는 `Metadata: Read`, `Contents: Read & Write`, `Repository creation: Write`가 필요합니다.
+개인 계정의 CodeiaryBlog만 연결 대상으로 사용합니다. 저장소는 만들었지만 설치 승인이 아직 없거나
+해당 설치에 저장소가 포함되지 않았다면 `repository.installationId`는 null입니다.
+프론트는 이 상태를 **연동 완료**로 표시하지 않습니다.
+권한 승인 후 GitHub 연결을 다시 진행하면 OAuth 콜백에서 같은 저장소를 재사용해 설치 정보를 채웁니다.
+앱 설치 승인은 사용자가 직접 진행하며 `Only select repositories`에서 CodeiaryBlog만 허용합니다.
+설치 콜백의 `installation_id`만 믿고 연결을 생성하지 않습니다.
+
+OAuth를 먼저 마치는 흐름이므로 GitHub App 등록 화면의
+`Request user authorization (OAuth) during installation`은 끄고 설치 후 안내용 `Setup URL`을 사용합니다.
+예를 들어 `https://codeiary.com/home`으로 설정할 수 있으며,
+OAuth Callback URL(`/login/oauth2/code/github`)은 기존대로 유지합니다.
+설치 중 OAuth까지 요청하면 Spring이 시작하지 않은 콜백이 발생해 실패할 수 있습니다.
+프로필에는 별도의 저장소 준비·선택·권한 확인 버튼을 두지 않습니다.
+GitHub 연결 버튼은 OAuth 시작 주소로만 이동하고, 저장소 준비는 OAuth 완료 서비스에서 자동 실행합니다.
+
+GitHub OAuth 토큰은 Spring의 메모리 Authorized Client 저장소를 사용합니다.
+서버 재시작·만료 후 저장소 준비를 다시 하려면 `GITHUB_REAUTH_REQUIRED`(409)에 따라 GitHub 재인증이 필요하며,
+기존 Codeiary 로그인과 DB 연결 정보는 삭제하지 않습니다. 연동 해제도 원격 저장소를 삭제하지 않습니다.
+원격 저장소 생성과 로컬 DB 저장은 하나의 트랜잭션이 아니므로, DB 저장 실패 후 재시도해도 같은 저장소를 재사용합니다.
+GitHub에서 설치 권한을 철회한 사실은 자동 갱신되지 않으므로 실제 동기화 구현 시 작업마다 다시 확인해야 합니다.
+현재 글 전송·자동 동기화·설치 웹훅 처리는 포함하지 않습니다.
+모든 응답은 `Cache-Control: no-store`이며 토큰과 외부 API 응답 원문을 오류 로그에 남기지 않습니다.
+
+설정에는 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`를 사용합니다.
+이번 저장소 생성에는 개인 키나 추가 DB 마이그레이션이 필요하지 않습니다.
+OAuth 인증 자체의 실패는 `/auth/callback?error=oauth2`로 반환합니다.
+계정 연결 후 저장소 준비만 실패한 경우에는 `error=github_repository`로 돌아오며,
+프론트는 기존 Codeiary 로그인 세션을 복원하고 실패를 안내합니다. GitHub 연결을 다시 시도할 수 있습니다.
 
 ### 사용자 온보딩과 공개 프로필
 

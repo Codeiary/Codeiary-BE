@@ -4,6 +4,8 @@ import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.AuthInfo;
 import com.codeiary.domain.github.dto.GitHubLinkContext;
 import com.codeiary.domain.github.dto.response.GitHubConnectionResponse;
+import com.codeiary.domain.github.dto.response.GitHubRepositoryResponse;
+import com.codeiary.domain.github.client.GitHubRepositoryClient.Repository;
 import com.codeiary.domain.github.entity.GitHubConnection;
 import com.codeiary.domain.github.exception.GitHubErrorCode;
 import com.codeiary.domain.github.repository.GitHubConnectionRepository;
@@ -34,8 +36,22 @@ public class GitHubConnectionService {
     @Transactional(readOnly = true)
     public GitHubConnectionResponse findConnection(Long userId) {
         return connections.findByUserId(userId)
-                .map(connection -> new GitHubConnectionResponse(true, connection.getGithubLogin()))
-                .orElseGet(() -> new GitHubConnectionResponse(false, null));
+                .map(connection -> new GitHubConnectionResponse(true, connection.getGithubLogin(),
+                        GitHubRepositoryResponse.from(connection)))
+                .orElseGet(() -> new GitHubConnectionResponse(false, null, null));
+    }
+
+    @Transactional
+    public void saveRepository(Long userId, Long connectionId, Long githubUserId, Long installationId,
+            Repository repository) {
+        users.findByIdForUpdate(userId)
+                .filter(user -> user.isEnabled() && user.isOnboardingCompleted())
+                .orElseThrow(() -> new RestApiException(SecurityErrorCode.UNAUTHORIZED));
+        var connection = connections.findByUserId(userId)
+                .filter(item -> item.getId().equals(connectionId) && item.getGithubUserId().equals(githubUserId))
+                .orElseThrow(() -> new RestApiException(GitHubErrorCode.INVALID_GITHUB_LINK));
+        connection.connectRepository(installationId, repository.id(), repository.owner().login(),
+                repository.name(), repository.defaultBranch());
     }
 
     @Transactional

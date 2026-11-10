@@ -50,6 +50,8 @@ class OAuthAccountServiceTest {
     @Mock private UserRepository users;
     @Mock private TokenSessionService sessions;
     @Mock private GitHubConnectionService githubConnections;
+    @Mock private com.codeiary.domain.github.service.GitHubRepositoryService githubRepositories;
+    @Mock private org.springframework.transaction.PlatformTransactionManager transactions;
     @InjectMocks private OAuthAccountService service;
 
     private final String subject = "google-subject-123";
