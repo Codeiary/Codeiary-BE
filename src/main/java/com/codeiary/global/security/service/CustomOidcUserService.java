@@ -1,5 +1,6 @@
 package com.codeiary.global.security.service;
 
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.AuthInfo;
 import com.codeiary.global.security.dto.OAuth2Response;
 import com.codeiary.global.security.dto.adapter.OAuth2ResponseFactory;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 public class CustomOidcUserService extends OidcUserService {
 
     @Override
+    @LogExecution
     public OidcUser loadUser(OidcUserRequest request) {
         OidcUser user = super.loadUser(request);
         OAuth2Response profile = OAuth2ResponseFactory.from(

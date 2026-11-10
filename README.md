@@ -160,8 +160,7 @@ GET `/users/me`와 `/users/nickname-availability`에도 인증이 필요하며,
 기존 `{ "message": "...", "code": "..." }` 형식을 사용합니다.
 현재 CSRF 검사는 비활성화되어 있고, 인증 쿠키의 SameSite 기본값은 Strict입니다.
 
-인증 업무는 `domain/auth`에서 관리합니다. `controller/TokenController`는 재발급·로그아웃 API를,
-`service/OAuthAccountService`는 OAuth 계정 생성·연결을,
+JWT 인증 업무는 `domain/auth`에서 관리합니다. `controller/TokenController`는 재발급·로그아웃 API를,
 `service/TokenSessionService`는 로그인 세션·재발급·폐기를 담당합니다.
 리프레시 토큰과 블랙리스트는 `entity`, `repository`에 두고,
 만료된 기록은 `scheduler/TokenCleanupScheduler`에서 정리합니다.
@@ -173,6 +172,128 @@ GET `/users/me`와 `/users/nickname-availability`에도 인증이 필요하며,
 Spring Security 연동은 `global/security`에 둡니다. OAuth2/OIDC 사용자 정보 조회는 `service`,
 인증·인가 오류 응답 처리는 `exception`, 로그인 결과 처리는 `handler`, 사용자 객체와 어댑터는 `dto`에서 담당합니다. 이 연동 클래스들은 `@Component`로 등록하고, 업무 규칙을 처리하는 서비스는 `@Service`로 구분합니다.
 요청 인증 필터는 `global/security/filter/TokenAuthenticationFilter`에 둡니다.
+
+### Google 로그인과 GitHub 연동 아키텍처
+
+Google은 **Codeiary 로그인**, GitHub는 **로그인한 사용자의 계정 연동**에 사용합니다.
+두 흐름 모두 Spring Security의 OAuth 시작 경로와 콜백 처리를 사용하며,
+별도의 GitHub 인증 시작 API는 두지 않습니다.
+
+| 구분 | Google | GitHub |
+| --- | --- | --- |
+| 목적 | 사용자 조회·가입 후 로그인 | 기존 Codeiary 사용자에게 GitHub 계정 연결 |
+| 방식 | OAuth2 + OIDC | OAuth2 |
+| 시작 경로 | `GET /oauth2/authorization/google` | `GET /oauth2/authorization/github` |
+| 콜백 경로 | `/login/oauth2/code/google` | `/login/oauth2/code/github` |
+| 시작 조건 | 비로그인 사용자도 가능 | 로그인한 USER·ADMIN만 가능 |
+| 사용자 조회 | `CustomOidcUserService` | `CustomOAuth2UserService` |
+| 성공 결과 | 서비스 JWT 쿠키 발급 | `github_connection` 저장, 서비스 JWT 추가 발급 없음 |
+
+#### 공통 처리 구조
+
+```mermaid
+flowchart TD
+    Browser["브라우저"] --> Start["Spring OAuth 시작 경로"]
+    Start --> Resolver["기본 Resolver 빈<br/>state 생성 · GitHub 연동 사용자 정보 추가"]
+    Resolver --> Session["OAuth2RequestRepository<br/>인증 요청을 임시 세션에 저장"]
+    Session --> Provider["Google 또는 GitHub 인증"]
+    Provider --> Callback["Spring OAuth 콜백 처리<br/>state 검증 · code 교환 · 사용자 정보 조회"]
+    Callback --> Handler["CustomOauth2SuccessHandler"]
+    Handler --> Account["OAuthAccountService.complete"]
+    Account -->|Google| Login["사용자 조회·가입<br/>TokenSessionService: 서비스 JWT 발급"]
+    Account -->|GitHub| Link["GitHubConnectionService<br/>기존 사용자와 GitHub 계정 연결"]
+    Login --> DB[(PostgreSQL)]
+    Link --> DB
+    Handler --> Frontend["프론트 /auth/callback으로 복귀"]
+```
+
+`OAuthAccountService`는 `global/security/service`에 두고 인증 성공 후 처리를 모읍니다.
+Google 사용자 조회·가입은 내부 `getOrCreate()`에서 처리하고,
+GitHub 연결의 저장·조회·해제는 `domain/github`의 `GitHubConnectionService`가 담당합니다.
+성공 핸들러는 서비스를 호출하고, 반환된 서비스 JWT가 있을 때만 쿠키를 작성합니다.
+
+#### Google 로그인 흐름
+
+```mermaid
+sequenceDiagram
+    participant Browser as 브라우저
+    participant API as 백엔드
+    participant Session as 임시 세션
+    participant Google as Google
+    participant DB as PostgreSQL
+
+    Browser->>API: GET /oauth2/authorization/google
+    API->>Session: OAuth 인증 요청 저장 (state 등)
+    API-->>Browser: Google 인증 주소로 리다이렉트
+    Browser->>Google: 로그인·동의
+    Google-->>Browser: 콜백 주소로 리다이렉트 (code, state)
+    Browser->>API: GET /login/oauth2/code/google (세션 쿠키 포함)
+    API->>Session: state 대조 후 인증 요청 꺼내기·삭제
+    API->>Google: code로 토큰 요청
+    Google-->>API: ID Token · Access Token
+    API->>API: Spring OIDC 검증 · CustomOidcUserService 프로필 변환
+    API->>API: OAuthAccountService.complete → getOrCreate
+    API->>DB: 기존 사용자 조회 또는 신규 사용자 저장
+    API->>API: TokenSessionService: 서비스 JWT 생성
+    API->>DB: Refresh Token 해시 저장
+    API-->>Browser: 서비스 JWT HttpOnly 쿠키 + 프론트 /auth/callback 이동
+```
+
+Google 응답은 `GoogleOAuth2Response`가 공통 `AuthInfo`로 변환하는 데 필요한 값을 제공합니다.
+기존 계정은 Google의 `sub`로 식별하고, 최초 가입자는 `PENDING` 권한으로 생성합니다.
+
+#### GitHub 연동 흐름
+
+```mermaid
+sequenceDiagram
+    participant Browser as 브라우저
+    participant API as 백엔드
+    participant Session as 임시 세션
+    participant GitHub as GitHub
+    participant DB as PostgreSQL
+
+    Browser->>API: GET /oauth2/authorization/github (서비스 Access Token 쿠키)
+    API->>DB: TokenAuthenticationFilter: 로그인 사용자 확인
+    API->>API: USER·ADMIN 권한 확인
+    API->>Session: OAuth 요청 저장 (state, GitHubLinkContext)
+    Note over API,Session: GitHubLinkContext = Codeiary 사용자 ID + 시작 시간
+    API-->>Browser: GitHub 인증 주소로 리다이렉트
+    Browser->>GitHub: 계정 인증·동의
+    GitHub-->>Browser: 콜백 주소로 리다이렉트 (code, state)
+    Browser->>API: GET /login/oauth2/code/github (세션 쿠키 포함)
+    API->>Session: state 대조 후 인증 요청 꺼내기·삭제
+    Note over API,Session: 꺼낸 요청은 현재 HTTP 요청에 보관해 성공 핸들러에 전달
+    API->>GitHub: code로 토큰 요청
+    GitHub-->>API: GitHub Access Token
+    API->>GitHub: 인증된 사용자 조회
+    GitHub-->>API: GitHub 사용자 ID · login
+    API->>API: CustomOAuth2UserService → GitHubOAuth2Response
+    API->>API: OAuthAccountService.complete → GitHubConnectionService.connect
+    API->>DB: 사용자 행 잠금 · 활성 상태 확인 · 계정 연결 저장
+    API-->>Browser: 프론트 /auth/callback 이동 (서비스 JWT 추가 발급 없음)
+```
+
+GitHub 시작 요청은 토큰 필터가 OAuth 리다이렉트 필터보다 먼저 처리합니다.
+미로그인은 401, 온보딩 전 사용자는 403으로 차단합니다.
+콜백에서는 시작할 때 보관한 Codeiary 사용자 ID를 사용하며,
+연동 정보가 없거나 시작 후 10분이 지나면 연결하지 않습니다.
+GitHub 계정의 식별에는 변경 가능한 `login` 대신 숫자 사용자 ID를 사용하고,
+사용자 ID와 GitHub 사용자 ID의 UNIQUE 제약으로 중복 연결을 막습니다.
+
+임시 세션은 OAuth 왕복 요청의 `state`와 연동 시작 정보를 보관하는 용도입니다.
+로그인 완료 후 일반 API 요청은 서비스 JWT 쿠키로 인증합니다.
+`STATELESS` 설정과 OAuth 인증 과정의 임시 세션 사용은 구분합니다.
+
+| 메서드 | 경로 | 동작 |
+| --- | --- | --- |
+| GET | `/github/connection` | 내 연동 여부와 GitHub 아이디 조회 |
+| DELETE | `/github/connection` | 내 연결 정보와 Spring Authorized Client 삭제 |
+
+계정 연결만 구현된 상태이며 App 설치·저장소 선택·글 동기화는 포함하지 않습니다.
+연동·해제는 같은 사용자 행 잠금을 사용합니다. 연동 해제는 Codeiary 내부의 연결을 삭제하며,
+GitHub 사이트에 남은 앱 승인 권한을 철회하지는 않습니다.
+GitHub 설정에는 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`을 사용합니다.
+OAuth 콜백 실패는 `SecurityErrorHandler`가 프론트 `/auth/callback?error=oauth2`로 돌려보냅니다.
 
 ### 사용자 온보딩과 공개 프로필
 

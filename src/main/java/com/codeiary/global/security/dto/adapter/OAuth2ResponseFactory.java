@@ -28,6 +28,9 @@ public final class OAuth2ResponseFactory {
         if (OAuthProvider.GOOGLE.getRegistrationId().equalsIgnoreCase(registrationId)) {
             return new GoogleOAuth2Response(attributes);
         }
+        else if (OAuthProvider.GITHUB.getRegistrationId().equalsIgnoreCase(registrationId)) {
+            return new GitHubOAuth2Response(attributes);
+        }
         throw new OAuth2AuthenticationException(new OAuth2Error("unsupported_provider"));
     }
 }

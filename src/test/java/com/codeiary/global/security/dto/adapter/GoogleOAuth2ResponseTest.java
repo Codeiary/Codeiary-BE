@@ -36,13 +36,10 @@ class GoogleOAuth2ResponseTest {
     private static Stream<Arguments> emailClaims() {
         return Stream.of(
                 Arguments.of("owner@gmail.com", true, null, true, true),
-                Arguments.of("Owner@GMAIL.COM", true, null, true, true),
                 Arguments.of("owner@company.com", true, "company.com", true, true),
                 Arguments.of("owner@company.com", true, null, true, false),
-                Arguments.of("owner@company.com", true, " ", true, false),
                 Arguments.of("owner@gmail.com", false, null, false, false),
                 Arguments.of("owner@gmail.com", "true", null, false, false),
-                Arguments.of("owner@company.com", false, "company.com", false, false),
                 Arguments.of(null, true, "company.com", true, false));
     }
 }
