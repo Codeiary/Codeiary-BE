@@ -334,12 +334,77 @@ GitHub OAuth 토큰은 Spring의 메모리 Authorized Client 저장소를 사용
 서버 재시작·만료 후 저장소 준비를 다시 하려면 `GITHUB_REAUTH_REQUIRED`(409)에 따라 GitHub 재인증이 필요하며,
 기존 Codeiary 로그인과 DB 연결 정보는 삭제하지 않습니다. 연동 해제도 원격 저장소를 삭제하지 않습니다.
 원격 저장소 생성과 로컬 DB 저장은 하나의 트랜잭션이 아니므로, DB 저장 실패 후 재시도해도 같은 저장소를 재사용합니다.
-GitHub에서 설치 권한을 철회한 사실은 자동 갱신되지 않으므로 실제 동기화 구현 시 작업마다 다시 확인해야 합니다.
-현재 글 전송·자동 동기화·설치 웹훅 처리는 포함하지 않습니다.
+글 저장·수정·삭제의 DB 트랜잭션 안에서 연결된 CodeiaryBlog의 `posts/{글 ID}.md`를 동기화합니다.
+현재 공개된 글만 제목과 Markdown 본문을 전송합니다. 제목을 바꿔도 파일 경로는 유지합니다.
+비공개 전환·글 삭제 시 현재 파일을 삭제하지만 Git 커밋 이력에 이미 올라간 내용은 남습니다.
+동일한 내용은 커밋하지 않습니다. 앱 설치 토큰은 매 작업마다 해당 저장소와 Contents write로 제한해 발급하므로
+설치 권한을 철회하면 이후 전송은 거부됩니다. 설치 웹훅은 구현하지 않았습니다.
 모든 응답은 `Cache-Control: no-store`이며 토큰과 외부 API 응답 원문을 오류 로그에 남기지 않습니다.
 
 설정에는 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`를 사용합니다.
-이번 저장소 생성에는 개인 키나 추가 DB 마이그레이션이 필요하지 않습니다.
+저장소 생성에는 개인 키가 필요하지 않지만, 재시작 후에도 동작하는 자동 푸시에는 GitHub App 개인 키가 필요합니다.
+`GITHUB_APP_PRIVATE_KEY_PATH`에 PKCS#8 PEM 파일의 서버 내 절대 경로를 설정합니다.
+GitHub에서 받은 파일이 `BEGIN RSA PRIVATE KEY` 형식이면 다음과 같이 변환합니다.
+
+```bash
+openssl pkcs8 -topk8 -nocrypt -in github-app.pem -out github-app-pkcs8.pem
+chmod 600 github-app-pkcs8.pem
+```
+
+Docker에서는 파일을 컨테이너에 읽기 전용으로 마운트하고 환경변수에는 컨테이너 내부 경로를 지정합니다.
+개인 키는 Git·이미지·로그에 포함하지 않습니다. OAuth Client Secret과는 다른 자격 증명입니다.
+부하 테스트의 기준 구현으로 일반 이벤트 리스너가 요청 스레드에서 GitHub 호출을 동기 실행합니다.
+GitHub 응답을 기다리는 동안 DB 트랜잭션과 커넥션이 유지되고, 전송 실패는 호출자에게 전파돼 DB를 롤백합니다.
+백그라운드 큐·아웃박스·영속 재시도는 사용하지 않습니다. 기존 글 전체를 일괄 업로드하지는 않습니다.
+GitHub 커밋과 DB는 분산 트랜잭션이 아닙니다. GitHub 성공 후 DB 커밋 실패나 응답 타임아웃이 발생하면
+원격 커밋만 남을 수 있으며 DB 롤백으로 GitHub 변경을 취소할 수 없습니다.
+동시 요청은 GitHub 커밋 충돌과 API 호출 제한의 영향을 받으므로 부하 테스트는 외부 API 스텁을 우선 사용합니다.
+
+로컬 부하 테스트에서는 `local,loadtest` 프로필로 실행하면 GitHub 전송 클라이언트가 목 객체로 교체됩니다.
+GitHub가 연동된 테스트 사용자의 글 생성·수정·삭제는 동일한 DB 트랜잭션 안에서 목 응답을 기다립니다.
+미연동 사용자는 기존처럼 GitHub 처리를 건너뜁니다. 실제 토큰 발급·HTTP 요청·GitHub 커밋은 발생하지 않습니다.
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local,loadtest'
+```
+
+기본 대기는 동기화 작업 전체당 500ms입니다. `GITHUB_MOCK_DELAY=2s`처럼 바꾸거나 `0ms`로 기준값을 측정할 수 있습니다.
+이는 GitHub API의 충돌·호출 제한·파일 저장 동작을 재현하지 않고, 외부 호출 대기로 인한 커넥션 점유를 측정하는 용도입니다.
+SQL 상세 로그는 이 프로필에서 끕니다. `prod`와 `loadtest` 프로필을 함께 사용하면 시작을 차단합니다.
+`loadtest`는 블로그 동기화만 대체하므로 OAuth 연동 자체는 여전히 실제 GitHub를 사용합니다.
+
+로컬 모니터링 구성인 `monitoring/`와 `compose.monitoring.yaml`은 Git·Docker 빌드 컨텍스트에서 제외합니다.
+모니터링 서버는 별도로 준비하고 백엔드의 `/actuator/prometheus`를 수집합니다.
+응답 시간 p95용 히스토그램은 `loadtest` 프로필에서 활성화합니다.
+
+백엔드 자체의 자원을 제한하려면 호스트에서 실행 중인 8080 서버를 종료한 뒤 전용 컨테이너를 사용합니다.
+
+```bash
+./gradlew bootJar
+docker compose -f compose.loadtest.yaml up -d --build
+```
+
+기본값은 알려진 EC2 t4g.micro의 자원 수에 맞춰 CPU 2코어·컨테이너 메모리 1GiB·추가 스왑 0·JVM `-Xms128m -Xmx512m`입니다.
+다른 제한과 비교할 때는 `LOADTEST_CPUS`, `LOADTEST_MEMORY`, `LOADTEST_JAVA_OPTIONS`를 변경합니다.
+
+```bash
+LOADTEST_CPUS=1.0 LOADTEST_MEMORY=2g LOADTEST_JAVA_OPTIONS='-Xms256m -Xmx1g' \
+  docker compose -f compose.loadtest.yaml up -d --no-build
+```
+
+이 로컬 CPU 제한은 Graviton2의 코어 성능·CPU 크레딧을 재현하지 않으며,
+EC2의 OS·에이전트 메모리 사용량과 RDS 인스턴스·스토리지·네트워크 제한도 포함하지 않습니다.
+먼저 Git에서 제외된 `.env.loadtest`에 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `TOKEN_JWT_SECRET`을 설정합니다.
+호스트 DB 접속 주소는 예를 들어 `jdbc:postgresql://host.docker.internal:5432/codeiary`를 사용합니다.
+기존 로그인 쿠키를 유지하려면 호스트 백엔드와 동일한 JWT 서명 키를 사용합니다.
+부하 발생기와 Prometheus·Grafana·PostgreSQL의 자원에는 이 제한이 적용되지 않습니다.
+`Dockerfile.loadtest`는 `build/libs`의 실행 JAR만 복사하며 개인 키와 환경변수 파일을 이미지에 포함하지 않습니다.
+
+`tests/performance/blog-update.k6.js`는 VU별 글 하나를 반복 수정하는 유지형 테스트입니다.
+`tests/performance/blog-two-updates.k6.js`는 VU마다 다른 글 두 개를 순서대로 한 번씩 수정하는 버스트 테스트입니다.
+두 스크립트 모두 로컬 주소만 허용하며 `ACCESS_TOKEN`, `POST_IDS`, `CATEGORY`, `VUS`를 환경변수로 받습니다.
+테스트 데이터는 실행 전에 별도로 준비하고 종료 후 정리합니다. 버스트의 `POST_IDS`는 VU 수의 두 배가 필요합니다.
+
 OAuth 인증 자체의 실패는 `/auth/callback?error=oauth2`로 반환합니다.
 계정 연결 후 저장소 준비만 실패한 경우에는 `error=github_repository`로 돌아오며,
 프론트는 기존 Codeiary 로그인 세션을 복원하고 실패를 안내합니다. GitHub 연결을 다시 시도할 수 있습니다.
