@@ -3,6 +3,13 @@ HELP.md
 build/
 .env
 .env.*
+*.pem
+*.key
+
+### Local monitoring ###
+/monitoring/
+/compose.monitoring.yaml
+
 !.env.example
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
