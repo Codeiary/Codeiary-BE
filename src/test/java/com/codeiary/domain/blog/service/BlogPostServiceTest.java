@@ -6,6 +6,7 @@ import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.entity.Category;
 import com.codeiary.domain.blog.entity.Tag;
+import com.codeiary.domain.blog.event.BlogPostChanged;
 import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.TagRepository;
 import java.util.List;
@@ -29,6 +30,7 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -38,6 +40,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.clearInvocations;
 
 @ExtendWith(MockitoExtension.class)
 class BlogPostServiceTest {
@@ -47,11 +50,12 @@ class BlogPostServiceTest {
     @Mock private ImageUrlValidator imageUrls;
     @Mock private CategoryRepository categories;
     @Mock private TagRepository tags;
+    @Mock private ApplicationEventPublisher events;
     private BlogPostService service;
 
     @BeforeEach
     void setUp() {
-        service = new BlogPostService(posts, postLikes, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags);
+        service = new BlogPostService(posts, postLikes, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags, events);
     }
 
     @Test
@@ -64,7 +68,11 @@ class BlogPostServiceTest {
                 .willReturn(Category.create(user, "Java"));
         given(tags.findByNameInOrderByNameAsc(List.of("java", "spring")))
                 .willReturn(List.of(Tag.create("java"), Tag.create("spring")));
-        given(posts.save(any(BlogPost.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(posts.save(any(BlogPost.class))).willAnswer(invocation -> {
+            BlogPost post = invocation.getArgument(0);
+            ReflectionTestUtils.setField(post, "id", BlogPostFixture.ID);
+            return post;
+        });
 
         // when
         BlogPostResponse response = service.create(user, BlogPostFixture.request());
@@ -81,6 +89,20 @@ class BlogPostServiceTest {
         assertThat(response.author().nickname()).isEqualTo("기록자");
         assertThat(response.author().profileImageUrl()).isEqualTo(user.getProfileImageUrl());
         then(imageUrls).shouldHaveNoInteractions();
+        then(events).should().publishEvent(new BlogPostChanged(BlogPostFixture.ID, user.getId()));
+    }
+
+    @Test
+    void updateAndDeletePublishPostIdentityForAfterCommitSync() {
+        var user = UserFixture.createWithId();
+        var post = BlogPostFixture.createWithId(user, true);
+        given(posts.findById(post.getId())).willReturn(Optional.of(post));
+        given(categories.findByAuthorIdAndName(user.getId(), "Java")).willReturn(post.getCategory());
+        service.update(post.getId(), user, new BlogPostRequest("수정", "본문", "Java", List.of(), null, false));
+        then(events).should().publishEvent(new BlogPostChanged(post.getId(), user.getId()));
+        clearInvocations(events);
+        service.delete(post.getId(), user);
+        then(events).should().publishEvent(new BlogPostChanged(post.getId(), user.getId()));
     }
 
     @ParameterizedTest
@@ -101,6 +123,7 @@ class BlogPostServiceTest {
                 .isInstanceOfSatisfying(RestApiException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(BlogErrorCode.POST_ACCESS_DENIED));
         then(posts).should(never()).delete(any());
+        then(events).shouldHaveNoInteractions();
     }
 
     @Test
@@ -131,5 +154,6 @@ class BlogPostServiceTest {
                 .isInstanceOf(RestApiException.class);
         assertThat(post.getTitle()).isEqualTo("첫 기록");
         assertThat(post.isPublicPost()).isTrue();
+        then(events).shouldHaveNoInteractions();
     }
 }

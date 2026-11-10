@@ -4,6 +4,10 @@
 build
 .env
 .env.*
+*.pem
+*.key
+monitoring/
+compose.monitoring.yaml
 !.env.example
 *.iml
 .idea

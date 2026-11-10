@@ -6,6 +6,7 @@ import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.entity.Category;
 import com.codeiary.domain.blog.entity.Tag;
+import com.codeiary.domain.blog.event.BlogPostChanged;
 import com.codeiary.domain.blog.exception.BlogErrorCode;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.blog.repository.PostLikeRepository;
@@ -18,6 +19,7 @@ import com.codeiary.global.logging.LogExecution;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +34,7 @@ public class BlogPostService {
     private final ImageUrlValidator imageUrls;
     private final CategoryRepository categories;
     private final TagRepository tags;
+    private final ApplicationEventPublisher events;
 
     @Transactional
     @LogExecution
@@ -40,7 +43,9 @@ public class BlogPostService {
         Category category = resolveCategory(user, normalized.category());
         BlogPost post = postMapper.toEntity(normalized, user, category);
         post.replaceTags(resolveTags(normalized.tags()));
-        return postMapper.toResponse(posts.save(post));
+        posts.save(post);
+        events.publishEvent(new BlogPostChanged(post.getId(), user.getId()));
+        return postMapper.toResponse(post);
     }
 
     @LogExecution
@@ -63,6 +68,7 @@ public class BlogPostService {
         post.update(normalized.title(), normalized.content(), category,
                 normalized.representativeImageUrl(), normalized.publicPost());
         post.replaceTags(resolvedTags);
+        events.publishEvent(new BlogPostChanged(post.getId(), user.getId()));
         return postMapper.toResponse(post);
     }
 
@@ -70,6 +76,7 @@ public class BlogPostService {
     @LogExecution
     public void delete(Long postId, User user) {
         posts.delete(findOwnedPost(postId, user));
+        events.publishEvent(new BlogPostChanged(postId, user.getId()));
     }
 
     private BlogPost findPost(Long postId) {
@@ -104,7 +111,6 @@ public class BlogPostService {
         if (names.isEmpty()) {
             return List.of();
         }
-        // A consistent insert order also avoids reversed lock acquisition on shared tags.
         names.forEach(tags::insertIfAbsent);
         return tags.findByNameInOrderByNameAsc(names);
     }
