@@ -1,0 +1,13 @@
+github:
+  mock-delay: ${GITHUB_MOCK_DELAY:500ms}
+
+management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+logging:
+  level:
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: warn
