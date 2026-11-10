@@ -1,4 +1,4 @@
-package com.codeiary.domain.auth.service;
+package com.codeiary.global.security.service;
 
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.exception.UserErrorCode;
@@ -6,6 +6,14 @@ import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.domain.auth.dto.TokenPair;
+import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.github.dto.GitHubLinkContext;
+import com.codeiary.domain.github.service.GitHubConnectionService;
+import com.codeiary.domain.user.entity.enums.OAuthProvider;
+import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import com.codeiary.global.security.exception.SecurityErrorCode;
 import java.util.Locale;
 import java.util.Optional;
@@ -21,10 +29,29 @@ import org.springframework.util.StringUtils;
 public class OAuthAccountService {
 
     private final UserRepository users;
+    private final TokenSessionService sessions;
+    private final GitHubConnectionService githubConnections;
 
     @Transactional
     @LogExecution
-    public User getOrCreate(AuthInfo profile) {
+    public Optional<TokenPair> complete(Authentication authentication, OAuth2AuthorizationRequest authorization) {
+        if (!(authentication.getPrincipal() instanceof CustomOAuth2User user)) {
+            throw new RestApiException(SecurityErrorCode.UNAUTHORIZED);
+        }
+        var profile = user.getAuthInfo();
+        if (profile.provider() == OAuthProvider.GOOGLE) {
+            return Optional.of(sessions.createSession(getOrCreate(profile).getEmail()));
+        }
+        if (profile.provider() == OAuthProvider.GITHUB) {
+            GitHubLinkContext context = authorization == null ? null
+                    : authorization.getAttribute(GitHubLinkContext.ATTRIBUTE);
+            githubConnections.connect(profile, context);
+            return Optional.empty();
+        }
+        throw new RestApiException(SecurityErrorCode.UNAUTHORIZED);
+    }
+
+    private User getOrCreate(AuthInfo profile) {
         if (profile.provider() == null || !profile.emailVerified()) {
             throw new RestApiException(SecurityErrorCode.UNAUTHORIZED);
         }
