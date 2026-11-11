@@ -343,7 +343,9 @@ GitHub OAuth 토큰은 Spring의 메모리 Authorized Client 저장소를 사용
 
 설정에는 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`를 사용합니다.
 저장소 생성에는 개인 키가 필요하지 않지만, 재시작 후에도 동작하는 자동 푸시에는 GitHub App 개인 키가 필요합니다.
-`GITHUB_APP_PRIVATE_KEY_PATH`에 PKCS#8 PEM 파일의 서버 내 절대 경로를 설정합니다.
+로컬에서는 `GITHUB_APP_PRIVATE_KEY_PATH`에 PKCS#8 PEM 파일의 절대 경로를 설정합니다.
+운영 배포는 Parameter Store의 `github-app-private-key`를 컨테이너가 읽을 수 있는 파일로 저장하고
+해당 파일을 읽기 전용으로 마운트합니다.
 GitHub에서 받은 파일이 `BEGIN RSA PRIVATE KEY` 형식이면 다음과 같이 변환합니다.
 
 ```bash
@@ -537,8 +539,11 @@ GitHub Actions 변수는 `EC2_AWS_ROLE_ARN`, `EC2_SSM_INSTANCE_ID`입니다.
 배포 스크립트 `deploy/deploy-api.sh`는 애플리케이션 포트 `8080`과 Prometheus 지표 포트 `9091`을 게시합니다.
 이 스크립트 변경 후에는 EC2의 `/usr/local/sbin/codeiary-deploy-api`에도 같은 버전을 반영해야 합니다.
 스크립트는 서울 리전 `/codeiary/prod/`의 `db-url`,
-`db-username`, `db-password`, `jwt-secret`, Google OAuth 및 미디어 설정을 읽습니다.
-비밀값은 임시 환경 파일로 전달하고 배포 종료 시 파일을 삭제합니다.
+`db-username`, `db-password`, `jwt-secret`, Google OAuth, GitHub App,
+`valkey-endpoint` 및 미디어 설정을 읽습니다. GitHub App 키는
+`github-app-private-key` SecureString에서 읽어 EC2의 `/opt/codeiary/secrets/`에 저장하고
+컨테이너에는 읽기 전용으로 마운트합니다. 다른 비밀값은 임시 환경 파일로 전달하고
+배포 종료 시 임시 파일을 삭제합니다. Valkey Serverless 연결에는 TLS와 클러스터 모드를 사용합니다.
 S3 업로드는 EC2 IAM 역할과 버킷 정책으로 허용하며 정적 AWS 키를 사용하지 않습니다.
 
 운영 애플리케이션은 요청마다 trace ID와 사용자 ID를 MDC에 넣어 시작·종료 로그를 남기며, `X-Request-Id` 응답 헤더로 같은 요청을 확인할 수 있습니다. 4xx 응답은 `WARN`, 5xx 응답은 `ERROR` 레벨입니다.

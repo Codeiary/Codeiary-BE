@@ -1,4 +1,11 @@
 spring:
+  data:
+    redis:
+      cluster:
+        nodes: ${VALKEY_ENDPOINT}
+      ssl:
+        enabled: true
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
