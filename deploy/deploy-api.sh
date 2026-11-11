@@ -14,22 +14,26 @@ chmod 600 "$temporary_env"
 
 # Fetch secrets without placing their values in SSM command output or logs.
 python3 - "$temporary_env" <<'PY'
-import json,subprocess,sys,urllib.parse
+import json,os,subprocess,sys,tempfile,urllib.parse
 region='ap-northeast-2'
-required={'db-url':'DB_URL','db-username':'DB_USERNAME','db-password':'DB_PASSWORD','jwt-secret':'JWT_SECRET','google-client-id':'GOOGLE_CLIENT_ID','google-client-secret':'GOOGLE_CLIENT_SECRET'}
+required={'db-url':'DB_URL','db-username':'DB_USERNAME','db-password':'DB_PASSWORD','jwt-secret':'JWT_SECRET','google-client-id':'GOOGLE_CLIENT_ID','google-client-secret':'GOOGLE_CLIENT_SECRET','github-client-id':'GITHUB_CLIENT_ID','github-client-secret':'GITHUB_CLIENT_SECRET','valkey-endpoint':'VALKEY_ENDPOINT'}
 optional={'oauth2-redirect-home':('OAUTH2_REDIRECT_HOME','https://codeiary.com/auth/callback'),'media-s3-bucket':('MEDIA_S3_BUCKET',''),'media-public-base-url':('MEDIA_PUBLIC_BASE_URL','')}
-names=['/codeiary/prod/'+name for name in [*required,*optional]]
-response=subprocess.run(['aws','ssm','get-parameters','--region',region,'--with-decryption','--names',*names,'--output','json'],capture_output=True,text=True)
-if response.returncode:
-    raise SystemExit('Unable to read runtime parameters; inspect EC2 role permissions')
-data=json.loads(response.stdout)
-values={p['Name'].rsplit('/',1)[-1]:p['Value'] for p in data['Parameters']}
+names=['/codeiary/prod/'+name for name in [*required,*optional,'github-app-private-key']]
+values={}
+for index in range(0,len(names),10):
+    response=subprocess.run(['aws','ssm','get-parameters','--region',region,'--with-decryption','--names',*names[index:index+10],'--output','json'],capture_output=True,text=True)
+    if response.returncode:
+        raise SystemExit('Unable to read runtime parameters; inspect EC2 role permissions')
+    data=json.loads(response.stdout)
+    values.update({p['Name'].rsplit('/',1)[-1]:p['Value'] for p in data['Parameters']})
 missing=[name for name in required if not values.get(name)]
+if not values.get('github-app-private-key'):
+    missing.append('github-app-private-key')
 if missing:
     raise SystemExit('Missing required Parameter Store names: '+', '.join(missing))
 env={key:values[name] for name,key in required.items()}
 env.update({key:values.get(name,default) for name,(key,default) in optional.items()})
-env.update(SPRING_PROFILES_ACTIVE='prod',AWS_REGION=region,TOKEN_COOKIE_SECURE='true',TOKEN_COOKIE_DOMAIN='.codeiary.com',TOKEN_COOKIE_SAME_SITE='Lax',JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=60.0 -XX:InitialRAMPercentage=20.0')
+env.update(SPRING_PROFILES_ACTIVE='prod',AWS_REGION=region,TOKEN_COOKIE_SECURE='true',TOKEN_COOKIE_DOMAIN='.codeiary.com',TOKEN_COOKIE_SAME_SITE='Lax',GITHUB_APP_PRIVATE_KEY_PATH='/run/secrets/github-app-pkcs8.pem',JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=60.0 -XX:InitialRAMPercentage=20.0')
 url=urllib.parse.urlsplit(env['DB_URL'].removeprefix('jdbc:'))
 if url.scheme!='postgresql' or url.hostname!='rested-postgres.cfoukaeewtg4.ap-northeast-2.rds.amazonaws.com' or url.port!=5432 or url.path!='/codeiary':
     raise SystemExit('DB_URL must point to the expected rested-postgres/codeiary database')
@@ -38,6 +42,22 @@ if urllib.parse.parse_qs(url.query).get('sslmode',[''])[0] not in ['require','ve
 for key,value in env.items():
     if '\n' in value or '\r' in value or '\x00' in value:
         raise SystemExit('Invalid multiline runtime parameter: '+key)
+private_key=values['github-app-private-key']
+if not private_key.startswith('-----BEGIN PRIVATE KEY-----') or '-----END PRIVATE KEY-----' not in private_key:
+    raise SystemExit('GitHub App private key must be PKCS8 PEM')
+secret_dir='/opt/codeiary/secrets'
+os.makedirs(secret_dir, mode=0o700, exist_ok=True)
+key_path=secret_dir+'/github-app-pkcs8.pem'
+descriptor,temp_key=tempfile.mkstemp(prefix='.github-app-', dir=secret_dir)
+try:
+    os.fchmod(descriptor, 0o400)
+    os.fchown(descriptor, 10001, 10001)
+    with os.fdopen(descriptor,'w') as file:
+        file.write(private_key)
+    os.replace(temp_key,key_path)
+finally:
+    if os.path.exists(temp_key):
+        os.unlink(temp_key)
 with open(sys.argv[1],'w') as file:
     file.write(''.join(key+'='+value+'\n' for key,value in env.items()))
 PY
@@ -67,7 +87,9 @@ start_container() {
   docker run -d --name codeiary-api --restart unless-stopped \
     --memory=768m --cpus=1.5 --cap-drop ALL --security-opt no-new-privileges \
     --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
-    --env-file "$temporary_env" -p 8080:8080 -p 9091:9091 "$1" >/dev/null
+    --env-file "$temporary_env" \
+    --mount type=bind,src=/opt/codeiary/secrets/github-app-pkcs8.pem,dst=/run/secrets/github-app-pkcs8.pem,readonly \
+    -p 8080:8080 -p 9091:9091 "$1" >/dev/null
 }
 docker rm -f codeiary-api >/dev/null 2>&1 || true
 if ! start_container "$IMAGE"; then
