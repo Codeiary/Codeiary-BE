@@ -133,6 +133,7 @@ public class SecurityConfig {
             if (!user.isOnboardingCompleted()) {
                 throw new AccessDeniedException(SecurityErrorCode.DENIED_ACCESS.getMessage());
             }
+            builder.additionalParameters(parameters -> parameters.put("prompt", "select_account"));
             attributes.put(GitHubLinkContext.ATTRIBUTE, new GitHubLinkContext(user.getId(), Instant.now()));
         }));
         return resolver;

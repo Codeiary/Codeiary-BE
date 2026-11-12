@@ -6,20 +6,21 @@ import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.entity.Category;
 import com.codeiary.domain.blog.entity.Tag;
-import com.codeiary.domain.blog.event.BlogPostChanged;
 import com.codeiary.domain.blog.exception.BlogErrorCode;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.TagRepository;
 import com.codeiary.domain.image.validation.ImageUrlValidator;
+import com.codeiary.domain.github.entity.enums.EventType;
+import com.codeiary.domain.github.service.GitHubBlogOutboxService;
+import com.codeiary.domain.github.service.GitHubBlogPath;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.logging.LogExecution;
 import java.util.List;
 import java.util.Locale;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +35,7 @@ public class BlogPostService {
     private final ImageUrlValidator imageUrls;
     private final CategoryRepository categories;
     private final TagRepository tags;
-    private final ApplicationEventPublisher events;
+    private final GitHubBlogOutboxService outbox;
 
     @Transactional
     @LogExecution
@@ -44,7 +45,7 @@ public class BlogPostService {
         BlogPost post = postMapper.toEntity(normalized, user, category);
         post.replaceTags(resolveTags(normalized.tags()));
         posts.save(post);
-        events.publishEvent(new BlogPostChanged(post.getId(), user.getId()));
+        outbox.savePendingChange(post, EventType.CREATED, null);
         return postMapper.toResponse(post);
     }
 
@@ -62,21 +63,23 @@ public class BlogPostService {
     @LogExecution
     public BlogPostResponse update(Long postId, User user, BlogPostRequest request) {
         BlogPost post = findOwnedPost(postId, user);
+        String previousPath = GitHubBlogPath.of(post);
         BlogPostRequest normalized = normalize(request);
         Category category = resolveCategory(user, normalized.category());
         List<Tag> resolvedTags = resolveTags(normalized.tags());
         post.update(normalized.title(), normalized.content(), category,
                 normalized.representativeImageUrl(), normalized.publicPost());
         post.replaceTags(resolvedTags);
-        events.publishEvent(new BlogPostChanged(post.getId(), user.getId()));
+        outbox.savePendingChange(post, EventType.UPDATED, previousPath);
         return postMapper.toResponse(post);
     }
 
     @Transactional
     @LogExecution
     public void delete(Long postId, User user) {
-        posts.delete(findOwnedPost(postId, user));
-        events.publishEvent(new BlogPostChanged(postId, user.getId()));
+        BlogPost post = findOwnedPost(postId, user);
+        outbox.savePendingChange(post, EventType.DELETED, GitHubBlogPath.of(post));
+        posts.delete(post);
     }
 
     private BlogPost findPost(Long postId) {

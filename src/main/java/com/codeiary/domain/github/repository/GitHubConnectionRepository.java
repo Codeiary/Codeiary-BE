@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface GitHubConnectionRepository extends JpaRepository<GitHubConnection, Long> {
     Optional<GitHubConnection> findByUserId(Long userId);
+    boolean existsByUserIdAndInstallationIdIsNotNull(Long userId);
 }

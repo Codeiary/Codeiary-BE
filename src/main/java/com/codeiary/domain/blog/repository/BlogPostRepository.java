@@ -9,6 +9,8 @@ public interface BlogPostRepository extends JpaRepository<BlogPost, Long>, BlogP
 
     boolean existsByIdAndPublicPostTrue(Long id);
 
+    boolean existsByIdAndAuthorId(Long id, Long authorId);
+
     @Override
     @EntityGraph(attributePaths = {"author", "category", "postTags.tag"})
     Optional<BlogPost> findById(Long id);

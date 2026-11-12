@@ -35,6 +35,15 @@ oauth2:
 
 github:
   app-private-key-path: ${GITHUB_APP_PRIVATE_KEY_PATH:}
+  blog-sync:
+    publish-interval-ms: 1000
+    publish-batch-size: 50
+    consume-interval-ms: 1000
+    consume-batch-size: 20
+    max-failures: 10
+    reclaim-after: 120s
+    consumer-group: codeiary-blog-sync
+    stream-key: codeiary:blog:outbox
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

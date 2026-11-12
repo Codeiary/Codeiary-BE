@@ -94,6 +94,7 @@ dependencies {
     // Test
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
+    testImplementation 'org.testcontainers:testcontainers'
 }
 
 tasks.named('test') {
