@@ -1,5 +1,6 @@
 package com.codeiary.global.security.service;
 
+import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.AuthInfo;
 import com.codeiary.global.security.dto.OAuth2Response;
 import com.codeiary.global.security.dto.adapter.OAuth2ResponseFactory;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     @Override
+    @LogExecution
     public OAuth2User loadUser(OAuth2UserRequest request) throws OAuth2AuthenticationException {
         OAuth2User user = super.loadUser(request);
         OAuth2Response profile = OAuth2ResponseFactory.from(

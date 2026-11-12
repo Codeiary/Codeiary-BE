@@ -1,13 +1,14 @@
 package com.codeiary.global.config;
 
-import com.codeiary.global.security.handler.CustomOauth2FailureHandler;
 import com.codeiary.global.security.handler.CustomOauth2SuccessHandler;
+import com.codeiary.global.security.repository.OAuth2RequestRepository;
 import com.codeiary.global.security.exception.SecurityErrorHandler;
 import com.codeiary.global.security.service.CustomOAuth2UserService;
 import com.codeiary.global.security.service.CustomOidcUserService;
 import com.codeiary.global.security.filter.TokenAuthenticationFilter;
 import com.codeiary.global.logging.MDCFilter;
 import jakarta.servlet.DispatcherType;
+
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
@@ -18,8 +19,20 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.DefaultOAuth2AuthorizationRequestResolver;
 import org.springframework.security.web.SecurityFilterChain;
-import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import com.codeiary.domain.github.dto.GitHubLinkContext;
+import com.codeiary.domain.user.entity.User;
+import com.codeiary.domain.user.entity.enums.OAuthProvider;
+import com.codeiary.global.security.exception.SecurityErrorCode;
+import java.time.Instant;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.InsufficientAuthenticationException;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.endpoint.OAuth2ParameterNames;
+import org.springframework.security.config.ObjectPostProcessor;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -35,7 +48,8 @@ public class SecurityConfig {
             CustomOAuth2UserService oauth2UserService,
             CustomOidcUserService oidcUserService,
             CustomOauth2SuccessHandler successHandler,
-            CustomOauth2FailureHandler failureHandler,
+            OAuth2RequestRepository authorizationRequests,
+            DefaultOAuth2AuthorizationRequestResolver authorizationResolver,
             @Value("${logging.api.warn-error-only:}") List<String> warnErrorOnlyApis
     ) {
         return http
@@ -46,11 +60,21 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .requestCache(AbstractHttpConfigurer::disable)
                 .oauth2Login(oauth2 -> oauth2
+                        .withObjectPostProcessor(new ObjectPostProcessor<OAuth2AuthorizationRequestRedirectFilter>() {
+                            @Override
+                            public <O extends OAuth2AuthorizationRequestRedirectFilter> O postProcess(O filter) {
+                                filter.setAuthenticationFailureHandler(errors);
+                                return filter;
+                            }
+                        })
+                        .authorizationEndpoint(endpoint -> endpoint
+                                .authorizationRequestResolver(authorizationResolver)
+                                .authorizationRequestRepository(authorizationRequests))
                         .userInfoEndpoint(userInfo -> userInfo
                                 .userService(oauth2UserService)
                                 .oidcUserService(oidcUserService))
                         .successHandler(successHandler)
-                        .failureHandler(failureHandler))
+                        .failureHandler(errors::handleOAuthFailure))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(errors).accessDeniedHandler(errors))
@@ -70,8 +94,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/posts/**", "/users/**",
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().hasAnyRole("USER", "ADMIN"))
-                .addFilterBefore(tokenFilter,
-                        UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(tokenFilter, OAuth2AuthorizationRequestRedirectFilter.class)
                 .addFilterBefore(new MDCFilter(warnErrorOnlyApis), TokenAuthenticationFilter.class)
                 .build();
     }
@@ -94,5 +117,25 @@ public class SecurityConfig {
         FilterRegistrationBean<TokenAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
         registration.setEnabled(false);
         return registration;
+    }
+
+    @Bean
+    DefaultOAuth2AuthorizationRequestResolver authorizationRequestResolver(ClientRegistrationRepository registrations) {
+        var resolver = new DefaultOAuth2AuthorizationRequestResolver(registrations, "/oauth2/authorization");
+        resolver.setAuthorizationRequestCustomizer(builder -> builder.attributes(attributes -> {
+            if (!OAuthProvider.GITHUB.getRegistrationId().equals(attributes.get(OAuth2ParameterNames.REGISTRATION_ID))) {
+                return;
+            }
+            var authentication = SecurityContextHolder.getContext().getAuthentication();
+            if (authentication == null || !(authentication.getPrincipal() instanceof User user)) {
+                throw new InsufficientAuthenticationException(SecurityErrorCode.UNAUTHORIZED.getMessage());
+            }
+            if (!user.isOnboardingCompleted()) {
+                throw new AccessDeniedException(SecurityErrorCode.DENIED_ACCESS.getMessage());
+            }
+            builder.additionalParameters(parameters -> parameters.put("prompt", "select_account"));
+            attributes.put(GitHubLinkContext.ATTRIBUTE, new GitHubLinkContext(user.getId(), Instant.now()));
+        }));
+        return resolver;
     }
 }

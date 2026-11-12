@@ -160,8 +160,7 @@ GET `/users/me`와 `/users/nickname-availability`에도 인증이 필요하며,
 기존 `{ "message": "...", "code": "..." }` 형식을 사용합니다.
 현재 CSRF 검사는 비활성화되어 있고, 인증 쿠키의 SameSite 기본값은 Strict입니다.
 
-인증 업무는 `domain/auth`에서 관리합니다. `controller/TokenController`는 재발급·로그아웃 API를,
-`service/OAuthAccountService`는 OAuth 계정 생성·연결을,
+JWT 인증 업무는 `domain/auth`에서 관리합니다. `controller/TokenController`는 재발급·로그아웃 API를,
 `service/TokenSessionService`는 로그인 세션·재발급·폐기를 담당합니다.
 리프레시 토큰과 블랙리스트는 `entity`, `repository`에 두고,
 만료된 기록은 `scheduler/TokenCleanupScheduler`에서 정리합니다.
@@ -173,6 +172,293 @@ GET `/users/me`와 `/users/nickname-availability`에도 인증이 필요하며,
 Spring Security 연동은 `global/security`에 둡니다. OAuth2/OIDC 사용자 정보 조회는 `service`,
 인증·인가 오류 응답 처리는 `exception`, 로그인 결과 처리는 `handler`, 사용자 객체와 어댑터는 `dto`에서 담당합니다. 이 연동 클래스들은 `@Component`로 등록하고, 업무 규칙을 처리하는 서비스는 `@Service`로 구분합니다.
 요청 인증 필터는 `global/security/filter/TokenAuthenticationFilter`에 둡니다.
+
+### Google 로그인과 GitHub 연동 아키텍처
+
+Google은 **Codeiary 로그인**, GitHub는 **로그인한 사용자의 계정 연동**에 사용합니다.
+두 흐름 모두 Spring Security의 OAuth 시작 경로와 콜백 처리를 사용하며,
+별도의 GitHub 인증 시작 API는 두지 않습니다.
+
+| 구분 | Google | GitHub |
+| --- | --- | --- |
+| 목적 | 사용자 조회·가입 후 로그인 | 기존 Codeiary 사용자에게 GitHub 계정 연결 |
+| 방식 | OAuth2 + OIDC | OAuth2 |
+| 시작 경로 | `GET /oauth2/authorization/google` | `GET /oauth2/authorization/github` |
+| 콜백 경로 | `/login/oauth2/code/google` | `/login/oauth2/code/github` |
+| 시작 조건 | 비로그인 사용자도 가능 | 로그인한 USER·ADMIN만 가능 |
+| 사용자 조회 | `CustomOidcUserService` | `CustomOAuth2UserService` |
+| 성공 결과 | 서비스 JWT 쿠키 발급 | `github_connection` 저장, 서비스 JWT 추가 발급 없음 |
+
+#### 공통 처리 구조
+
+```mermaid
+flowchart TD
+    Browser["브라우저"] --> Start["Spring OAuth 시작 경로"]
+    Start --> Resolver["기본 Resolver 빈<br/>state 생성 · GitHub 연동 사용자 정보 추가"]
+    Resolver --> Session["OAuth2RequestRepository<br/>인증 요청을 임시 세션에 저장"]
+    Session --> Provider["Google 또는 GitHub 인증"]
+    Provider --> Callback["Spring OAuth 콜백 처리<br/>state 검증 · code 교환 · 사용자 정보 조회"]
+    Callback --> Handler["CustomOauth2SuccessHandler"]
+    Handler --> Account["OAuthAccountService.complete"]
+    Account -->|Google| Login["사용자 조회·가입<br/>TokenSessionService: 서비스 JWT 발급"]
+    Account -->|GitHub| Link["GitHubConnectionService<br/>기존 사용자와 GitHub 계정 연결"]
+    Login --> DB[(PostgreSQL)]
+    Link --> DB
+    Link --> Repository["GitHubRepositoryService<br/>CodeiaryBlog 자동 생성 · 설치 권한 확인"]
+    Repository --> DB
+    Handler --> Frontend["프론트 /auth/callback으로 복귀"]
+```
+
+`OAuthAccountService`는 `global/security/service`에 두고 인증 성공 후 처리를 모읍니다.
+Google 사용자 조회·가입은 내부 `getOrCreate()`에서 처리하고,
+GitHub 연결의 저장·조회·해제는 `domain/github`의 `GitHubConnectionService`가 담당합니다.
+성공 핸들러는 서비스를 호출하고, 반환된 서비스 JWT가 있을 때만 쿠키를 작성합니다.
+
+#### Google 로그인 흐름
+
+```mermaid
+sequenceDiagram
+    participant Browser as 브라우저
+    participant API as 백엔드
+    participant Session as 임시 세션
+    participant Google as Google
+    participant DB as PostgreSQL
+
+    Browser->>API: GET /oauth2/authorization/google
+    API->>Session: OAuth 인증 요청 저장 (state 등)
+    API-->>Browser: Google 인증 주소로 리다이렉트
+    Browser->>Google: 로그인·동의
+    Google-->>Browser: 콜백 주소로 리다이렉트 (code, state)
+    Browser->>API: GET /login/oauth2/code/google (세션 쿠키 포함)
+    API->>Session: state 대조 후 인증 요청 꺼내기·삭제
+    API->>Google: code로 토큰 요청
+    Google-->>API: ID Token · Access Token
+    API->>API: Spring OIDC 검증 · CustomOidcUserService 프로필 변환
+    API->>API: OAuthAccountService.complete → getOrCreate
+    API->>DB: 기존 사용자 조회 또는 신규 사용자 저장
+    API->>API: TokenSessionService: 서비스 JWT 생성
+    API->>DB: Refresh Token 해시 저장
+    API-->>Browser: 서비스 JWT HttpOnly 쿠키 + 프론트 /auth/callback 이동
+```
+
+Google 응답은 `GoogleOAuth2Response`가 공통 `AuthInfo`로 변환하는 데 필요한 값을 제공합니다.
+기존 계정은 Google의 `sub`로 식별하고, 최초 가입자는 `PENDING` 권한으로 생성합니다.
+
+#### GitHub 연동 흐름
+
+```mermaid
+sequenceDiagram
+    participant Browser as 브라우저
+    participant API as 백엔드
+    participant Session as 임시 세션
+    participant GitHub as GitHub
+    participant DB as PostgreSQL
+
+    Browser->>API: GET /oauth2/authorization/github (서비스 Access Token 쿠키)
+    API->>DB: TokenAuthenticationFilter: 로그인 사용자 확인
+    API->>API: USER·ADMIN 권한 확인
+    API->>Session: OAuth 요청 저장 (state, GitHubLinkContext)
+    Note over API,Session: GitHubLinkContext = Codeiary 사용자 ID + 시작 시간
+    API-->>Browser: GitHub 인증 주소로 리다이렉트
+    Browser->>GitHub: 계정 인증·동의
+    GitHub-->>Browser: 콜백 주소로 리다이렉트 (code, state)
+    Browser->>API: GET /login/oauth2/code/github (세션 쿠키 포함)
+    API->>Session: state 대조 후 인증 요청 꺼내기·삭제
+    Note over API,Session: 꺼낸 요청은 현재 HTTP 요청에 보관해 성공 핸들러에 전달
+    API->>GitHub: code로 토큰 요청
+    GitHub-->>API: GitHub Access Token
+    API->>GitHub: 인증된 사용자 조회
+    GitHub-->>API: GitHub 사용자 ID · login
+    API->>API: CustomOAuth2UserService → GitHubOAuth2Response
+    API->>API: OAuthAccountService.complete → GitHubConnectionService.connect
+    API->>DB: 사용자 행 잠금 · 활성 상태 확인 · 계정 연결 커밋
+    API->>GitHub: 내 CodeiaryBlog 조회 · 없으면 비공개 저장소 생성
+    GitHub-->>API: 저장소 ID · 이름 · 기본 브랜치
+    API->>GitHub: 앱 설치 및 저장소 쓰기 권한 확인
+    API->>DB: 연결 ID 재확인 · 저장소 정보 저장
+    API-->>Browser: 프론트 /auth/callback 이동 (서비스 JWT 추가 발급 없음)
+```
+
+GitHub 시작 요청은 토큰 필터가 OAuth 리다이렉트 필터보다 먼저 처리합니다.
+미로그인은 401, 온보딩 전 사용자는 403으로 차단합니다.
+콜백에서는 시작할 때 보관한 Codeiary 사용자 ID를 사용하며,
+연동 정보가 없거나 시작 후 10분이 지나면 연결하지 않습니다.
+GitHub 계정의 식별에는 변경 가능한 `login` 대신 숫자 사용자 ID를 사용하고,
+사용자 ID와 GitHub 사용자 ID의 UNIQUE 제약으로 중복 연결을 막습니다.
+
+임시 세션은 OAuth 왕복 요청의 `state`와 연동 시작 정보를 보관하는 용도입니다.
+로그인 완료 후 일반 API 요청은 서비스 JWT 쿠키로 인증합니다.
+`STATELESS` 설정과 OAuth 인증 과정의 임시 세션 사용은 구분합니다.
+
+| 메서드 | 경로 | 동작 |
+| --- | --- | --- |
+| GET | `/github/connection` | 계정·CodeiaryBlog 연결 정보 조회 |
+| DELETE | `/github/connection` | 내 연결 정보와 Spring Authorized Client 삭제 |
+
+GitHub OAuth 인증을 마치면 백엔드가 바로 개인 계정의 **CodeiaryBlog** 저장소를 준비합니다.
+이름을 입력하거나 저장소 목록에서 선택하는 단계는 없습니다.
+
+1. Spring OAuth에서 이미 검증한 GitHub 숫자 ID와 현재 로그인명을 재사용합니다. `/user`를 다시 조회하지 않습니다.
+2. `/repos/{현재 로그인명}/CodeiaryBlog`이 있으면 재사용합니다.
+3. 없다면 `POST /user/repos`로 비공개(`private: true`) 저장소를 README와 함께 생성합니다.
+4. 앱 설치 목록을 순차 조회해 저장소 소유자·이름·상태와 Contents 쓰기 권한을 확인합니다.
+   해당 설치에서 저장소에 실제로 쓸 수 있는지 검증한 뒤 연결 정보를 저장합니다.
+
+외부 HTTP 호출은 기존 RestClient로 순차 처리합니다. OAuth에서 받은 사용자 정보를 재사용해 중복 조회를 제거합니다.
+외부 요청이 실패하면 원래 도메인 오류로 전달하고 저장소 연결을 저장하지 않습니다.
+저장소 생성 자체는 GitHub의 원격 작업이므로 다른 조회가 실패해도 생성된 저장소는 남을 수 있고,
+다음 OAuth 시도에서 동일 저장소를 재사용합니다.
+
+기존 저장소의 파일·공개 설정은 변경하지 않습니다. 생성이 겹쳐 422가 반환되면 한 번 다시 조회하며,
+접근할 수 없는 동명 저장소를 덮어쓰거나 이름을 바꿔 추가 생성하지 않습니다.
+계정 연결은 먼저 커밋하고 외부 GitHub API를 호출하므로 원격 호출 동안 DB 행 잠금을 잡지 않습니다.
+마지막 저장 시에는 연결 ID와 GitHub 사용자 ID를 다시 확인해 중간에 해제·재연동된 연결을 덮어쓰지 않습니다.
+
+앱에는 `Metadata: Read`, `Contents: Read & Write`, `Repository creation: Write`가 필요합니다.
+개인 계정의 CodeiaryBlog만 연결 대상으로 사용합니다. 저장소는 만들었지만 설치 승인이 아직 없거나
+해당 설치에 저장소가 포함되지 않았다면 `repository.installationId`는 null입니다.
+프론트는 이 상태를 **연동 완료**로 표시하지 않습니다.
+권한 승인 후 GitHub 연결을 다시 진행하면 OAuth 콜백에서 같은 저장소를 재사용해 설치 정보를 채웁니다.
+앱 설치 승인은 사용자가 직접 진행하며 `Only select repositories`에서 CodeiaryBlog만 허용합니다.
+설치 콜백의 `installation_id`만 믿고 연결을 생성하지 않습니다.
+
+OAuth를 먼저 마치는 흐름이므로 GitHub App 등록 화면의
+`Request user authorization (OAuth) during installation`은 끄고 설치 후 안내용 `Setup URL`을 사용합니다.
+예를 들어 `https://codeiary.com/home`으로 설정할 수 있으며,
+OAuth Callback URL(`/login/oauth2/code/github`)은 기존대로 유지합니다.
+설치 중 OAuth까지 요청하면 Spring이 시작하지 않은 콜백이 발생해 실패할 수 있습니다.
+프로필에는 별도의 저장소 준비·선택·권한 확인 버튼을 두지 않습니다.
+GitHub 연결 버튼은 OAuth 시작 주소로만 이동하고, 저장소 준비는 OAuth 완료 서비스에서 자동 실행합니다.
+
+GitHub OAuth 토큰은 Spring의 메모리 Authorized Client 저장소를 사용합니다.
+서버 재시작·만료 후 저장소 준비를 다시 하려면 `GITHUB_REAUTH_REQUIRED`(409)에 따라 GitHub 재인증이 필요하며,
+기존 Codeiary 로그인과 DB 연결 정보는 삭제하지 않습니다. 연동 해제도 원격 저장소를 삭제하지 않습니다.
+원격 저장소 생성과 로컬 DB 저장은 하나의 트랜잭션이 아니므로, DB 저장 실패 후 재시도해도 같은 저장소를 재사용합니다.
+글 저장·수정·삭제 시 같은 DB 트랜잭션에 GitHub 동기화 작업을 아웃박스로 기록합니다.
+발행자가 Redis Stream에 작업 ID를 넣고 소비자가 GitHub에 반영합니다.
+공개 글의 파일 경로는 `{카테고리}/{제목}-{글 ID}.md`이며 제목과 Markdown 본문을 전송합니다.
+제목이나 카테고리를 바꾸면 이전 경로의 파일을 정리합니다.
+비공개 전환·글 삭제 시 현재 파일을 삭제하지만 Git 커밋 이력에 이미 올라간 내용은 남습니다.
+동일한 내용은 커밋하지 않습니다. 앱 설치 토큰은 매 작업마다 해당 저장소와 Contents write로 제한해 발급하므로
+설치 권한을 철회하면 이후 전송은 거부됩니다. 설치 웹훅은 구현하지 않았습니다.
+모든 응답은 `Cache-Control: no-store`이며 토큰과 외부 API 응답 원문을 오류 로그에 남기지 않습니다.
+
+설정에는 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`를 사용합니다.
+저장소 생성에는 개인 키가 필요하지 않지만, 재시작 후에도 동작하는 자동 푸시에는 GitHub App 개인 키가 필요합니다.
+로컬에서는 `GITHUB_APP_PRIVATE_KEY_PATH`에 PKCS#8 PEM 파일의 절대 경로를 설정합니다.
+운영 배포는 Parameter Store의 `github-app-private-key`를 컨테이너가 읽을 수 있는 파일로 저장하고
+해당 파일을 읽기 전용으로 마운트합니다.
+GitHub에서 받은 파일이 `BEGIN RSA PRIVATE KEY` 형식이면 다음과 같이 변환합니다.
+
+```bash
+openssl pkcs8 -topk8 -nocrypt -in github-app.pem -out github-app-pkcs8.pem
+chmod 600 github-app-pkcs8.pem
+```
+
+Docker에서는 파일을 컨테이너에 읽기 전용으로 마운트하고 환경변수에는 컨테이너 내부 경로를 지정합니다.
+개인 키는 Git·이미지·로그에 포함하지 않습니다. OAuth Client Secret과는 다른 자격 증명입니다.
+GitHub 전송은 요청의 DB 트랜잭션 밖에서 실행합니다. 전송 실패는 아웃박스에 남아 재시도됩니다.
+GitHub 커밋과 DB는 분산 트랜잭션이 아니므로 두 시스템의 반영 시점은 다를 수 있습니다.
+동시 요청은 GitHub 커밋 충돌과 API 호출 제한의 영향을 받으므로 부하 테스트는 외부 API 스텁을 우선 사용합니다.
+
+로컬 부하 테스트에서는 `local,loadtest` 프로필로 실행하면 GitHub 전송 클라이언트가 목 객체로 교체됩니다.
+GitHub가 연동된 테스트 사용자의 글 생성·수정·삭제는 아웃박스와 Redis Stream을 거쳐 목 응답을 받습니다.
+HTTP 요청은 목의 지연 시간을 기다리지 않습니다. 미연동 사용자는 아웃박스 기록을 건너뜁니다.
+목 동기화에서는 실제 GitHub 토큰 발급·HTTP 요청·커밋이 발생하지 않습니다.
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=local,loadtest'
+```
+
+기본 대기는 동기화 작업 전체당 500ms입니다. `GITHUB_MOCK_DELAY=2s`처럼 바꾸거나 `0ms`로 기준값을 측정할 수 있습니다.
+이는 GitHub API의 충돌·호출 제한·파일 저장 동작을 재현하지 않고, 소비자 처리 지연과 대기열을 측정하는 용도입니다.
+SQL 상세 로그는 이 프로필에서 끕니다. `prod`와 `loadtest` 프로필을 함께 사용하면 시작을 차단합니다.
+`loadtest`는 블로그 동기화만 대체하므로 OAuth 연동 자체는 여전히 실제 GitHub를 사용합니다.
+
+로컬 모니터링 구성인 `monitoring/`와 `compose.monitoring.yaml`은 Git·Docker 빌드 컨텍스트에서 제외합니다.
+모니터링 서버는 별도로 준비하고 백엔드의 `/actuator/prometheus`를 수집합니다.
+응답 시간 p95용 히스토그램은 `loadtest` 프로필에서 활성화합니다.
+
+백엔드 자체의 자원을 제한하려면 호스트에서 실행 중인 8080 서버를 종료한 뒤 전용 컨테이너를 사용합니다.
+
+```bash
+./gradlew bootJar
+docker compose -f compose.loadtest.yaml up -d --build
+```
+
+기본값은 알려진 EC2 t4g.micro의 자원 수에 맞춰 CPU 2코어·컨테이너 메모리 1GiB·추가 스왑 0·JVM `-Xms128m -Xmx512m`입니다.
+다른 제한과 비교할 때는 `LOADTEST_CPUS`, `LOADTEST_MEMORY`, `LOADTEST_JAVA_OPTIONS`를 변경합니다.
+
+```bash
+LOADTEST_CPUS=1.0 LOADTEST_MEMORY=2g LOADTEST_JAVA_OPTIONS='-Xms256m -Xmx1g' \
+  docker compose -f compose.loadtest.yaml up -d --no-build
+```
+
+이 로컬 CPU 제한은 Graviton2의 코어 성능·CPU 크레딧을 재현하지 않으며,
+EC2의 OS·에이전트 메모리 사용량과 RDS 인스턴스·스토리지·네트워크 제한도 포함하지 않습니다.
+먼저 Git에서 제외된 `.env.loadtest`에 `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `TOKEN_JWT_SECRET`을 설정합니다.
+호스트 DB 접속 주소는 예를 들어 `jdbc:postgresql://host.docker.internal:5432/codeiary`를 사용합니다.
+기존 로그인 쿠키를 유지하려면 호스트 백엔드와 동일한 JWT 서명 키를 사용합니다.
+부하 발생기와 Prometheus·Grafana·PostgreSQL의 자원에는 이 제한이 적용되지 않습니다.
+`Dockerfile.loadtest`는 `build/libs`의 실행 JAR만 복사하며 개인 키와 환경변수 파일을 이미지에 포함하지 않습니다.
+
+`tests/performance/blog-update.k6.js`는 VU별 글 하나를 반복 수정하는 유지형 테스트입니다.
+`tests/performance/blog-two-updates.k6.js`는 VU마다 다른 글 두 개를 순서대로 한 번씩 수정하는 버스트 테스트입니다.
+두 스크립트 모두 로컬 주소만 허용하며 `ACCESS_TOKEN`, `POST_IDS`, `CATEGORY`, `VUS`를 환경변수로 받습니다.
+테스트 데이터는 실행 전에 별도로 준비하고 종료 후 정리합니다. 버스트의 `POST_IDS`는 VU 수의 두 배가 필요합니다.
+
+#### 격리된 Docker 부하 테스트: 사용자 20명, 수정 요청 40개
+
+`compose.loadtest.isolated.yaml`은 개발 서버와 분리된 18080 포트에서 백엔드(2 CPU·1 GiB),
+PostgreSQL 17(2 CPU·1 GiB), Redis 7.4(0.5 CPU·256 MiB), Redis exporter를 실행합니다.
+`.env.loadtest.isolated`에는 `LOADTEST_DB_PASSWORD`와 Base64 인코딩된 `LOADTEST_JWT_SECRET`을 넣고
+파일 권한을 600으로 설정합니다. 이 파일과 발급된 테스트 토큰은 Git에 포함하지 않습니다.
+
+```bash
+./gradlew bootJar
+docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml up -d --build
+python3 tests/performance/prepare-isolated-loadtest.py
+k6 run --summary-export /tmp/codeiary-isolated-k6-result.json tests/performance/blog-isolated-20-users.k6.js
+```
+
+준비 스크립트는 Docker DB에 사용자 20명과 글 40개를 만들고 각 사용자에게 자기 글 두 개를 배정합니다.
+위 명령은 40건을 한 번에 보내는 버스트 테스트입니다. 20명이 두 건씩 총 40건을
+약 2분에 나눠 보내려면 아래 명령을 사용합니다. 기존 `blog-update.k6.js`는
+20명이 2분 동안 반복 수정하므로 총 요청 수가 40건을 넘습니다.
+
+```bash
+k6 run --summary-export /tmp/codeiary-isolated-40-over-2m.json tests/performance/blog-isolated-40-over-2m.k6.js
+```
+
+사용자 40명이 각자 두 건씩 총 80건을 약 2분에 나눠 보내려면 격리 컨테이너를
+초기화한 뒤 아래 명령을 사용합니다. 준비 스크립트의 사용자 수와 k6 스크립트의
+요청 수가 일치해야 합니다.
+
+```bash
+docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml down
+docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml up -d --no-build
+LOADTEST_USERS=40 python3 tests/performance/prepare-isolated-loadtest.py
+k6 run --summary-export /tmp/codeiary-isolated-80-over-2m.json tests/performance/blog-isolated-80-over-2m.k6.js
+```
+
+테스트 인증 파일은 `/tmp/codeiary-loadtest-{사용자 수}-users.json`에 저장되며 30분 후 만료됩니다.
+Redis Stream은 `codeiary:blog:outbox`이고, 완료 상태는 DB의 `github_blog_outbox`에서 확인합니다.
+로컬 Prometheus가 `monitoring/local/prometheus.yml`로 백엔드와 exporter를 수집하면
+[Grafana](http://localhost:3000) Explore에서 아래 PromQL을 볼 수 있습니다.
+
+```promql
+redis_stream_group_lag{job="codeiary-loadtest-redis"}
+redis_stream_group_messages_pending{job="codeiary-loadtest-redis"}
+redis_memory_used_bytes{job="codeiary-loadtest-redis"}
+hikaricp_connections_pending{job="codeiary-isolated-loadtest"}
+```
+
+실험을 마치면 `docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml down`으로
+격리 컨테이너를 삭제할 수 있습니다. PostgreSQL에 볼륨을 지정하지 않았으므로 테스트 DB 데이터도 삭제됩니다.
+
+OAuth 인증 자체의 실패는 `/auth/callback?error=oauth2`로 반환합니다.
+계정 연결 후 저장소 준비만 실패한 경우에는 `error=github_repository`로 돌아오며,
+프론트는 기존 Codeiary 로그인 세션을 복원하고 실패를 안내합니다. GitHub 연결을 다시 시도할 수 있습니다.
 
 ### 사용자 온보딩과 공개 프로필
 
@@ -302,8 +588,12 @@ GitHub Actions 변수는 `EC2_AWS_ROLE_ARN`, `EC2_SSM_INSTANCE_ID`입니다.
 배포 스크립트 `deploy/deploy-api.sh`는 애플리케이션 포트 `8080`과 Prometheus 지표 포트 `9091`을 게시합니다.
 이 스크립트 변경 후에는 EC2의 `/usr/local/sbin/codeiary-deploy-api`에도 같은 버전을 반영해야 합니다.
 스크립트는 서울 리전 `/codeiary/prod/`의 `db-url`,
-`db-username`, `db-password`, `jwt-secret`, Google OAuth 및 미디어 설정을 읽습니다.
-비밀값은 임시 환경 파일로 전달하고 배포 종료 시 파일을 삭제합니다.
+`db-username`, `db-password`, `jwt-secret`, Google OAuth, GitHub App,
+`redis/host`, `redis/port` 및 미디어 설정을 읽습니다. GitHub App 키는
+`github-app-private-key` SecureString에서 읽어 EC2의 `/opt/codeiary/secrets/`에 저장하고
+컨테이너에는 읽기 전용으로 마운트합니다. 다른 비밀값은 임시 환경 파일로 전달하고
+배포 종료 시 임시 파일을 삭제합니다. 노드형 Valkey 연결에는 TLS를 사용하며,
+`redis/host`와 `redis/port`를 애플리케이션에 전달합니다.
 S3 업로드는 EC2 IAM 역할과 버킷 정책으로 허용하며 정적 AWS 키를 사용하지 않습니다.
 
 운영 애플리케이션은 요청마다 trace ID와 사용자 ID를 MDC에 넣어 시작·종료 로그를 남기며, `X-Request-Id` 응답 헤더로 같은 요청을 확인할 수 있습니다. 4xx 응답은 `WARN`, 5xx 응답은 `ERROR` 레벨입니다.

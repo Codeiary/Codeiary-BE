@@ -12,6 +12,9 @@ import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.TagRepository;
 import com.codeiary.domain.image.validation.ImageUrlValidator;
+import com.codeiary.domain.github.entity.enums.EventType;
+import com.codeiary.domain.github.service.GitHubBlogOutboxService;
+import com.codeiary.domain.github.service.GitHubBlogPath;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.logging.LogExecution;
@@ -32,6 +35,7 @@ public class BlogPostService {
     private final ImageUrlValidator imageUrls;
     private final CategoryRepository categories;
     private final TagRepository tags;
+    private final GitHubBlogOutboxService outbox;
 
     @Transactional
     @LogExecution
@@ -40,7 +44,9 @@ public class BlogPostService {
         Category category = resolveCategory(user, normalized.category());
         BlogPost post = postMapper.toEntity(normalized, user, category);
         post.replaceTags(resolveTags(normalized.tags()));
-        return postMapper.toResponse(posts.save(post));
+        posts.save(post);
+        outbox.savePendingChange(post, EventType.CREATED, null);
+        return postMapper.toResponse(post);
     }
 
     @LogExecution
@@ -57,19 +63,23 @@ public class BlogPostService {
     @LogExecution
     public BlogPostResponse update(Long postId, User user, BlogPostRequest request) {
         BlogPost post = findOwnedPost(postId, user);
+        String previousPath = GitHubBlogPath.of(post);
         BlogPostRequest normalized = normalize(request);
         Category category = resolveCategory(user, normalized.category());
         List<Tag> resolvedTags = resolveTags(normalized.tags());
         post.update(normalized.title(), normalized.content(), category,
                 normalized.representativeImageUrl(), normalized.publicPost());
         post.replaceTags(resolvedTags);
+        outbox.savePendingChange(post, EventType.UPDATED, previousPath);
         return postMapper.toResponse(post);
     }
 
     @Transactional
     @LogExecution
     public void delete(Long postId, User user) {
-        posts.delete(findOwnedPost(postId, user));
+        BlogPost post = findOwnedPost(postId, user);
+        outbox.savePendingChange(post, EventType.DELETED, GitHubBlogPath.of(post));
+        posts.delete(post);
     }
 
     private BlogPost findPost(Long postId) {
@@ -104,7 +114,6 @@ public class BlogPostService {
         if (names.isEmpty()) {
             return List.of();
         }
-        // A consistent insert order also avoids reversed lock acquisition on shared tags.
         names.forEach(tags::insertIfAbsent);
         return tags.findByNameInOrderByNameAsc(names);
     }

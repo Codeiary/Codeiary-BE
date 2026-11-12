@@ -13,6 +13,12 @@ spring:
             client-id: ${GOOGLE_CLIENT_ID:local-client}
             client-secret: ${GOOGLE_CLIENT_SECRET:local-secret}
             scope: openid,profile,email
+          github:
+            client-id: ${GITHUB_CLIENT_ID:local-github-client}
+            client-secret: ${GITHUB_CLIENT_SECRET:local-github-secret}
+            client-authentication-method: client_secret_post
+            redirect-uri: ${GITHUB_CALLBACK_URL:http://localhost:8080/login/oauth2/code/github}
+            scope: []
 
 logging:
   api:
@@ -39,6 +45,18 @@ server:
 
 oauth2:
   redirect-home: ${OAUTH2_REDIRECT_HOME:http://localhost:5173/auth/callback}
+
+github:
+  app-private-key-path: ${GITHUB_APP_PRIVATE_KEY_PATH:}
+  blog-sync:
+    publish-interval-ms: 1000
+    publish-batch-size: 50
+    consume-interval-ms: 1000
+    consume-batch-size: 20
+    max-failures: 10
+    reclaim-after: 120s
+    consumer-group: codeiary-blog-sync
+    stream-key: codeiary:blog:outbox
 
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}

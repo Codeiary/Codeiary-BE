@@ -6,6 +6,8 @@ import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.entity.Category;
 import com.codeiary.domain.blog.entity.Tag;
+import com.codeiary.domain.github.entity.enums.EventType;
+import com.codeiary.domain.github.service.GitHubBlogOutboxService;
 import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.TagRepository;
 import java.util.List;
@@ -34,10 +36,13 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.clearInvocations;
 
 @ExtendWith(MockitoExtension.class)
 class BlogPostServiceTest {
@@ -47,11 +52,12 @@ class BlogPostServiceTest {
     @Mock private ImageUrlValidator imageUrls;
     @Mock private CategoryRepository categories;
     @Mock private TagRepository tags;
+    @Mock private GitHubBlogOutboxService outbox;
     private BlogPostService service;
 
     @BeforeEach
     void setUp() {
-        service = new BlogPostService(posts, postLikes, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags);
+        service = new BlogPostService(posts, postLikes, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags, outbox);
     }
 
     @Test
@@ -64,7 +70,11 @@ class BlogPostServiceTest {
                 .willReturn(Category.create(user, "Java"));
         given(tags.findByNameInOrderByNameAsc(List.of("java", "spring")))
                 .willReturn(List.of(Tag.create("java"), Tag.create("spring")));
-        given(posts.save(any(BlogPost.class))).willAnswer(invocation -> invocation.getArgument(0));
+        given(posts.save(any(BlogPost.class))).willAnswer(invocation -> {
+            BlogPost post = invocation.getArgument(0);
+            ReflectionTestUtils.setField(post, "id", BlogPostFixture.ID);
+            return post;
+        });
 
         // when
         BlogPostResponse response = service.create(user, BlogPostFixture.request());
@@ -81,6 +91,20 @@ class BlogPostServiceTest {
         assertThat(response.author().nickname()).isEqualTo("기록자");
         assertThat(response.author().profileImageUrl()).isEqualTo(user.getProfileImageUrl());
         then(imageUrls).shouldHaveNoInteractions();
+        then(outbox).should().savePendingChange(any(BlogPost.class), eq(EventType.CREATED), isNull());
+    }
+
+    @Test
+    void updateAndDeleteRecordOutboxWork() {
+        var user = UserFixture.createWithId();
+        var post = BlogPostFixture.createWithId(user, true);
+        given(posts.findById(post.getId())).willReturn(Optional.of(post));
+        given(categories.findByAuthorIdAndName(user.getId(), "Java")).willReturn(post.getCategory());
+        service.update(post.getId(), user, new BlogPostRequest("수정", "본문", "Java", List.of(), null, false));
+        then(outbox).should().savePendingChange(post, EventType.UPDATED, "Java/첫 기록-10.md");
+        clearInvocations(outbox);
+        service.delete(post.getId(), user);
+        then(outbox).should().savePendingChange(post, EventType.DELETED, "Java/수정-10.md");
     }
 
     @ParameterizedTest
@@ -101,6 +125,7 @@ class BlogPostServiceTest {
                 .isInstanceOfSatisfying(RestApiException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(BlogErrorCode.POST_ACCESS_DENIED));
         then(posts).should(never()).delete(any());
+        then(outbox).shouldHaveNoInteractions();
     }
 
     @Test
@@ -131,5 +156,6 @@ class BlogPostServiceTest {
                 .isInstanceOf(RestApiException.class);
         assertThat(post.getTitle()).isEqualTo("첫 기록");
         assertThat(post.isPublicPost()).isTrue();
+        then(outbox).shouldHaveNoInteractions();
     }
 }

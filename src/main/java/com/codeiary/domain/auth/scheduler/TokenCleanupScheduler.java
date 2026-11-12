@@ -4,12 +4,14 @@ import com.codeiary.domain.auth.repository.RefreshTokenRepository;
 import com.codeiary.domain.auth.repository.TokenBlacklistRepository;
 import java.time.Instant;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "auth.token-cleanup.enabled", havingValue = "true", matchIfMissing = true)
 public class TokenCleanupScheduler {
 
     private final RefreshTokenRepository refreshTokens;

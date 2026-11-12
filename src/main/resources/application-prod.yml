@@ -1,4 +1,11 @@
 spring:
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: true
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}
@@ -12,6 +19,10 @@ spring:
             client-id: ${GOOGLE_CLIENT_ID}
             client-secret: ${GOOGLE_CLIENT_SECRET}
             scope: openid,profile,email
+          github:
+            client-id: ${GITHUB_CLIENT_ID}
+            client-secret: ${GITHUB_CLIENT_SECRET}
+            redirect-uri: ${GITHUB_CALLBACK_URL:https://api.codeiary.com/login/oauth2/code/github}
 
   jpa:
     hibernate:

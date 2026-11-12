@@ -1,0 +1,21 @@
+name: codeiary-loadtest
+
+services:
+  backend:
+    build:
+      context: ./build/libs
+      dockerfile: ../../Dockerfile.loadtest
+    image: codeiary-api:loadtest
+    env_file:
+      - .env.loadtest
+    environment:
+      SPRING_PROFILES_ACTIVE: local,loadtest
+      GITHUB_MOCK_DELAY: 500ms
+      JAVA_TOOL_OPTIONS: ${LOADTEST_JAVA_OPTIONS:--Xms128m -Xmx512m}
+      CLOUD_AWS_S3_ENDPOINT: http://host.docker.internal:9090
+    ports:
+      - "127.0.0.1:8080:8080"
+    cpus: ${LOADTEST_CPUS:-2.0}
+    mem_limit: ${LOADTEST_MEMORY:-1g}
+    memswap_limit: ${LOADTEST_MEMORY:-1g}
+    stop_grace_period: 30s

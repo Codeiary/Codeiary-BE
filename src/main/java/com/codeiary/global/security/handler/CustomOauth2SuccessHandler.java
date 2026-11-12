@@ -1,20 +1,18 @@
 package com.codeiary.global.security.handler;
 
-import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
-import com.codeiary.domain.auth.service.OAuthAccountService;
-import com.codeiary.domain.auth.dto.TokenPair;
+import com.codeiary.global.security.exception.SecurityErrorHandler;
+import com.codeiary.global.security.repository.OAuth2RequestRepository;
+
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import com.codeiary.domain.auth.cookie.TokenCookieManager;
-import com.codeiary.domain.auth.service.TokenSessionService;
-import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
-import com.codeiary.global.security.exception.SecurityErrorCode;
+import com.codeiary.global.security.service.OAuthAccountService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
@@ -23,10 +21,9 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CustomOauth2SuccessHandler implements AuthenticationSuccessHandler {
 
-    private final OAuthAccountService oauthAccounts;
-    private final TokenSessionService sessions;
+    private final OAuthAccountService accounts;
     private final TokenCookieManager cookies;
-    private final CustomOauth2FailureHandler failureHandler;
+    private final SecurityErrorHandler errors;
 
     @Value("${oauth2.redirect-home}")
     private String redirectHome;
@@ -37,21 +34,14 @@ public class CustomOauth2SuccessHandler implements AuthenticationSuccessHandler 
             HttpServletResponse response,
             Authentication authentication
     ) throws IOException {
-        if (!(authentication.getPrincipal() instanceof CustomOAuth2User oauth2User)) {
-            failureHandler.onAuthenticationFailure(request, response,
-                    new BadCredentialsException(SecurityErrorCode.UNAUTHORIZED.getMessage()));
-            return;
-        }
-        TokenPair pair;
         try {
-            User user = oauthAccounts.getOrCreate(oauth2User.getAuthInfo());
-            pair = sessions.createSession(user.getEmail());
+            var authorization = (OAuth2AuthorizationRequest) request.getAttribute(OAuth2RequestRepository.COMPLETED_REQUEST);
+            accounts.complete(authentication, authorization)
+                    .ifPresent(pair -> cookies.writeTokens(response, pair));
         } catch (RestApiException exception) {
-            failureHandler.onAuthenticationFailure(request, response,
-                    new BadCredentialsException(exception.getErrorCode().getMessage(), exception));
+            errors.handleOAuthFailure(request, response, exception);
             return;
         }
-        cookies.writeTokens(response, pair);
         response.sendRedirect(redirectHome);
     }
 }

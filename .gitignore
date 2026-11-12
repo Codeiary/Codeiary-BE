@@ -3,6 +3,22 @@ HELP.md
 build/
 .env
 .env.*
+*.pem
+*.key
+
+### Local monitoring ###
+/monitoring/
+/compose.monitoring.yaml
+/compose.loadtest.isolated.yaml
+/tests/performance/__pycache__/
+/tests/performance/*.json
+/tests/performance/*.csv
+/tests/performance/*.log
+/tests/performance/*.png
+/tests/performance/*.jpg
+/tests/performance/blog-isolated-*
+/tests/performance/prepare-isolated-loadtest.py
+
 !.env.example
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
