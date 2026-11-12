@@ -85,8 +85,8 @@ public class GitHubBlogOutboxService {
     public boolean isFinishedOrMissing(long id) {
         return outbox.isFinishedOrMissing(id);
     }
-    
-    
+
+
     @Transactional(readOnly = true)
     @LogExecution
     public GitHubBlogSyncContent read(ProcessingWork work) {

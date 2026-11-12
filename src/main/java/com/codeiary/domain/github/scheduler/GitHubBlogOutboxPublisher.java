@@ -20,7 +20,7 @@ public class GitHubBlogOutboxPublisher {
     private final GitHubBlogOutboxService outbox;
     private final RedisTemplate<String, String> redis;
     private final GitHubBlogSyncConfig config;
-    
+
 
     @Scheduled(fixedDelayString = "#{@githubBlogSyncConfig.publishIntervalMs}")
     public void publishDue() {

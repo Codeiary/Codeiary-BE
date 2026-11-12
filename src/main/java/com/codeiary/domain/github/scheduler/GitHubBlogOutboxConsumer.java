@@ -46,7 +46,7 @@ public class GitHubBlogOutboxConsumer {
 
             int remaining = config.getConsumeBatchSize() - recovered.size();
             if (remaining > 0) {
-            	
+
                 @SuppressWarnings("unchecked")
 				var newMessages = redis.opsForStream().read(Consumer.from(config.getConsumerGroup(), consumerName),
                         StreamReadOptions.empty().count(remaining),
@@ -127,7 +127,7 @@ public class GitHubBlogOutboxConsumer {
     private boolean redisErrorIs(DataAccessException exception, String code) {
         return String.valueOf(exception.getMostSpecificCause().getMessage()).contains(code);
     }
-    
+
     public void sync(ProcessingWork work) {
         var content = outbox.read(work);
         if (content != null) {
