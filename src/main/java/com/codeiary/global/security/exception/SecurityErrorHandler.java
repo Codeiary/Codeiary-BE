@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -22,6 +23,7 @@ import tools.jackson.databind.ObjectMapper;
 
 @Component
 @RequiredArgsConstructor
+@Slf4j
 public class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDeniedHandler, AuthenticationFailureHandler {
 
     private final ObjectMapper objectMapper;
@@ -32,12 +34,22 @@ public class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDen
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
                          AuthenticationException exception) throws IOException {
+        log.atWarn()
+                .addKeyValue("status", SecurityErrorCode.UNAUTHORIZED.getHttpStatus().value())
+                .addKeyValue("error_type", exception.getClass().getSimpleName())
+                .addKeyValue("error_message", SecurityErrorCode.UNAUTHORIZED.getMessage())
+                .log("Request failed");
         write(response, SecurityErrorCode.UNAUTHORIZED);
     }
 
     @Override
     public void handle(HttpServletRequest request, HttpServletResponse response,
                        AccessDeniedException exception) throws IOException {
+        log.atWarn()
+                .addKeyValue("status", SecurityErrorCode.DENIED_ACCESS.getHttpStatus().value())
+                .addKeyValue("error_type", exception.getClass().getSimpleName())
+                .addKeyValue("error_message", SecurityErrorCode.DENIED_ACCESS.getMessage())
+                .log("Request failed");
         write(response, SecurityErrorCode.DENIED_ACCESS);
     }
 

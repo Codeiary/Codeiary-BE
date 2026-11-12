@@ -27,15 +27,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(RestApiException.class)
     public ResponseEntity<ErrorResponse> handleRestApiException(RestApiException exception) {
-        if (exception.getErrorCode().getHttpStatus().is5xxServerError()) {
-            log.error("API 처리 오류: {}", exception.getErrorCode().name(), exception);
-        }
+        logFailure(exception, exception.getErrorCode().getHttpStatus());
         return createResponse(exception.getErrorCode());
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception exception) {
-        log.error("예상하지 못한 서버 오류", exception);
+        logFailure(exception, CommonErrorCode.INTERNAL_SERVER_ERROR.getHttpStatus());
         return createResponse(CommonErrorCode.INTERNAL_SERVER_ERROR);
     }
 
@@ -142,8 +140,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             HttpStatusCode status,
             WebRequest request) {
 
-        if (status.is5xxServerError()) {
-            log.error("Spring MVC 처리 오류", exception);
+        if (status.isError()) {
+            logFailure(exception, status);
         }
 
         ErrorCode errorCode = resolveErrorCode(status);
@@ -176,5 +174,19 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                     ? CommonErrorCode.INVALID_PARAMETER
                     : CommonErrorCode.INTERNAL_SERVER_ERROR;
         };
+    }
+
+    private void logFailure(Exception exception, HttpStatusCode status) {
+        var event = status.is5xxServerError() ? log.atError() : log.atWarn();
+        String errorMessage = exception instanceof RestApiException restApiException
+                ? restApiException.getErrorCode().getMessage()
+                : status.is4xxClientError() ? "Request failed" : "Unexpected server error";
+        event.addKeyValue("status", status.value())
+                .addKeyValue("error_type", exception.getClass().getSimpleName())
+                .addKeyValue("error_message", errorMessage);
+        if (status.is5xxServerError()) {
+            event.setCause(exception);
+        }
+        event.log("Request failed");
     }
 }
