@@ -20,6 +20,19 @@ spring:
             redirect-uri: ${GITHUB_CALLBACK_URL:http://localhost:8080/login/oauth2/code/github}
             scope: []
 
+logging:
+  api:
+    warn-error-only: "GET /health"
+  structured:
+    format:
+      console: logstash
+    json:
+      rename:
+        "[@timestamp]": time
+        thread_name: thread
+        logger_name: logger
+      exclude: "@version,level_value,tags"
+
 management:
   endpoints:
     web:

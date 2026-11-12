@@ -49,7 +49,8 @@ public class SecurityConfig {
             CustomOidcUserService oidcUserService,
             CustomOauth2SuccessHandler successHandler,
             OAuth2RequestRepository authorizationRequests,
-            DefaultOAuth2AuthorizationRequestResolver authorizationResolver
+            DefaultOAuth2AuthorizationRequestResolver authorizationResolver,
+            @Value("${logging.api.warn-error-only:}") List<String> warnErrorOnlyApis
     ) {
         return http
                 .cors(Customizer.withDefaults())
@@ -93,9 +94,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/posts/**", "/users/**",
                                 "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().hasAnyRole("USER", "ADMIN"))
-                .addFilterBefore(tokenFilter,
-                        OAuth2AuthorizationRequestRedirectFilter.class)
-                .addFilterAfter(new MDCFilter(), TokenAuthenticationFilter.class)
+                .addFilterBefore(tokenFilter, OAuth2AuthorizationRequestRedirectFilter.class)
+                .addFilterBefore(new MDCFilter(warnErrorOnlyApis), TokenAuthenticationFilter.class)
                 .build();
     }
 

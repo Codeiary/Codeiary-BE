@@ -21,20 +21,34 @@ public class ApiTrace {
 		Class<?> type = invocation.getSignature().getDeclaringType();
 		String target = type.getSimpleName() + "." + invocation.getSignature().getName();
 
-		log.info("[START] {}", target);
+		log.atInfo()
+				.addKeyValue("event", "method_start")
+				.addKeyValue("target", target)
+				.log("Method execution started");
 		try {
 			Object result = invocation.proceed();
-			log.info("[END] {} in {} ms", target, elapsedMillis(startedAt));
+			log.atInfo()
+					.addKeyValue("event", "method_end")
+					.addKeyValue("target", target)
+					.addKeyValue("durationMs", elapsedMillis(startedAt))
+					.log("Method execution completed");
 			return result;
 		} catch (Throwable exception) {
 			HttpStatusCode status = statusOf(exception);
-			if (status.is4xxClientError()) {
-				log.warn("[END] {} failed with HTTP {} in {} ms ({})", target, status.value(),
-						elapsedMillis(startedAt), exception.getClass().getSimpleName());
-			} else {
-				log.error("[END] {} failed with HTTP {} in {} ms", target, status.value(),
-						elapsedMillis(startedAt), exception);
+			String errorMessage = exception instanceof RestApiException restApiException
+					? restApiException.getErrorCode().getMessage()
+					: status.is4xxClientError() ? "Request failed" : "Unexpected server error";
+			var event = status.is4xxClientError() ? log.atWarn() : log.atError();
+			event.addKeyValue("event", "method_failure")
+					.addKeyValue("target", target)
+					.addKeyValue("status", status.value())
+					.addKeyValue("durationMs", elapsedMillis(startedAt))
+					.addKeyValue("error_type", exception.getClass().getSimpleName())
+					.addKeyValue("error_message", errorMessage);
+			if (status.is5xxServerError()) {
+				event.setCause(exception);
 			}
+			event.log("Method execution failed");
 			throw exception;
 		}
 	}
