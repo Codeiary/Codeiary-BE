@@ -16,7 +16,7 @@ chmod 600 "$temporary_env"
 python3 - "$temporary_env" <<'PY'
 import json,os,subprocess,sys,tempfile,urllib.parse
 region='ap-northeast-2'
-required={'db-url':'DB_URL','db-username':'DB_USERNAME','db-password':'DB_PASSWORD','jwt-secret':'JWT_SECRET','google-client-id':'GOOGLE_CLIENT_ID','google-client-secret':'GOOGLE_CLIENT_SECRET','github-client-id':'GITHUB_CLIENT_ID','github-client-secret':'GITHUB_CLIENT_SECRET','valkey-endpoint':'VALKEY_ENDPOINT'}
+required={'db-url':'DB_URL','db-username':'DB_USERNAME','db-password':'DB_PASSWORD','jwt-secret':'JWT_SECRET','google-client-id':'GOOGLE_CLIENT_ID','google-client-secret':'GOOGLE_CLIENT_SECRET','github-client-id':'GITHUB_CLIENT_ID','github-client-secret':'GITHUB_CLIENT_SECRET','redis/host':'REDIS_HOST','redis/port':'REDIS_PORT'}
 optional={'oauth2-redirect-home':('OAUTH2_REDIRECT_HOME','https://codeiary.com/auth/callback'),'media-s3-bucket':('MEDIA_S3_BUCKET',''),'media-public-base-url':('MEDIA_PUBLIC_BASE_URL','')}
 names=['/codeiary/prod/'+name for name in [*required,*optional,'github-app-private-key']]
 values={}
@@ -25,7 +25,7 @@ for index in range(0,len(names),10):
     if response.returncode:
         raise SystemExit('Unable to read runtime parameters; inspect EC2 role permissions')
     data=json.loads(response.stdout)
-    values.update({p['Name'].rsplit('/',1)[-1]:p['Value'] for p in data['Parameters']})
+    values.update({p['Name'].removeprefix('/codeiary/prod/'):p['Value'] for p in data['Parameters']})
 missing=[name for name in required if not values.get(name)]
 if not values.get('github-app-private-key'):
     missing.append('github-app-private-key')

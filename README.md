@@ -334,8 +334,10 @@ GitHub OAuth 토큰은 Spring의 메모리 Authorized Client 저장소를 사용
 서버 재시작·만료 후 저장소 준비를 다시 하려면 `GITHUB_REAUTH_REQUIRED`(409)에 따라 GitHub 재인증이 필요하며,
 기존 Codeiary 로그인과 DB 연결 정보는 삭제하지 않습니다. 연동 해제도 원격 저장소를 삭제하지 않습니다.
 원격 저장소 생성과 로컬 DB 저장은 하나의 트랜잭션이 아니므로, DB 저장 실패 후 재시도해도 같은 저장소를 재사용합니다.
-글 저장·수정·삭제의 DB 트랜잭션 안에서 연결된 CodeiaryBlog의 `posts/{글 ID}.md`를 동기화합니다.
-현재 공개된 글만 제목과 Markdown 본문을 전송합니다. 제목을 바꿔도 파일 경로는 유지합니다.
+글 저장·수정·삭제 시 같은 DB 트랜잭션에 GitHub 동기화 작업을 아웃박스로 기록합니다.
+발행자가 Redis Stream에 작업 ID를 넣고 소비자가 GitHub에 반영합니다.
+공개 글의 파일 경로는 `{카테고리}/{제목}-{글 ID}.md`이며 제목과 Markdown 본문을 전송합니다.
+제목이나 카테고리를 바꾸면 이전 경로의 파일을 정리합니다.
 비공개 전환·글 삭제 시 현재 파일을 삭제하지만 Git 커밋 이력에 이미 올라간 내용은 남습니다.
 동일한 내용은 커밋하지 않습니다. 앱 설치 토큰은 매 작업마다 해당 저장소와 Contents write로 제한해 발급하므로
 설치 권한을 철회하면 이후 전송은 거부됩니다. 설치 웹훅은 구현하지 않았습니다.
@@ -355,23 +357,21 @@ chmod 600 github-app-pkcs8.pem
 
 Docker에서는 파일을 컨테이너에 읽기 전용으로 마운트하고 환경변수에는 컨테이너 내부 경로를 지정합니다.
 개인 키는 Git·이미지·로그에 포함하지 않습니다. OAuth Client Secret과는 다른 자격 증명입니다.
-부하 테스트의 기준 구현으로 일반 이벤트 리스너가 요청 스레드에서 GitHub 호출을 동기 실행합니다.
-GitHub 응답을 기다리는 동안 DB 트랜잭션과 커넥션이 유지되고, 전송 실패는 호출자에게 전파돼 DB를 롤백합니다.
-백그라운드 큐·아웃박스·영속 재시도는 사용하지 않습니다. 기존 글 전체를 일괄 업로드하지는 않습니다.
-GitHub 커밋과 DB는 분산 트랜잭션이 아닙니다. GitHub 성공 후 DB 커밋 실패나 응답 타임아웃이 발생하면
-원격 커밋만 남을 수 있으며 DB 롤백으로 GitHub 변경을 취소할 수 없습니다.
+GitHub 전송은 요청의 DB 트랜잭션 밖에서 실행합니다. 전송 실패는 아웃박스에 남아 재시도됩니다.
+GitHub 커밋과 DB는 분산 트랜잭션이 아니므로 두 시스템의 반영 시점은 다를 수 있습니다.
 동시 요청은 GitHub 커밋 충돌과 API 호출 제한의 영향을 받으므로 부하 테스트는 외부 API 스텁을 우선 사용합니다.
 
 로컬 부하 테스트에서는 `local,loadtest` 프로필로 실행하면 GitHub 전송 클라이언트가 목 객체로 교체됩니다.
-GitHub가 연동된 테스트 사용자의 글 생성·수정·삭제는 동일한 DB 트랜잭션 안에서 목 응답을 기다립니다.
-미연동 사용자는 기존처럼 GitHub 처리를 건너뜁니다. 실제 토큰 발급·HTTP 요청·GitHub 커밋은 발생하지 않습니다.
+GitHub가 연동된 테스트 사용자의 글 생성·수정·삭제는 아웃박스와 Redis Stream을 거쳐 목 응답을 받습니다.
+HTTP 요청은 목의 지연 시간을 기다리지 않습니다. 미연동 사용자는 아웃박스 기록을 건너뜁니다.
+목 동기화에서는 실제 GitHub 토큰 발급·HTTP 요청·커밋이 발생하지 않습니다.
 
 ```bash
 ./gradlew bootRun --args='--spring.profiles.active=local,loadtest'
 ```
 
 기본 대기는 동기화 작업 전체당 500ms입니다. `GITHUB_MOCK_DELAY=2s`처럼 바꾸거나 `0ms`로 기준값을 측정할 수 있습니다.
-이는 GitHub API의 충돌·호출 제한·파일 저장 동작을 재현하지 않고, 외부 호출 대기로 인한 커넥션 점유를 측정하는 용도입니다.
+이는 GitHub API의 충돌·호출 제한·파일 저장 동작을 재현하지 않고, 소비자 처리 지연과 대기열을 측정하는 용도입니다.
 SQL 상세 로그는 이 프로필에서 끕니다. `prod`와 `loadtest` 프로필을 함께 사용하면 시작을 차단합니다.
 `loadtest`는 블로그 동기화만 대체하므로 OAuth 연동 자체는 여전히 실제 GitHub를 사용합니다.
 
@@ -406,6 +406,55 @@ EC2의 OS·에이전트 메모리 사용량과 RDS 인스턴스·스토리지·�
 `tests/performance/blog-two-updates.k6.js`는 VU마다 다른 글 두 개를 순서대로 한 번씩 수정하는 버스트 테스트입니다.
 두 스크립트 모두 로컬 주소만 허용하며 `ACCESS_TOKEN`, `POST_IDS`, `CATEGORY`, `VUS`를 환경변수로 받습니다.
 테스트 데이터는 실행 전에 별도로 준비하고 종료 후 정리합니다. 버스트의 `POST_IDS`는 VU 수의 두 배가 필요합니다.
+
+#### 격리된 Docker 부하 테스트: 사용자 20명, 수정 요청 40개
+
+`compose.loadtest.isolated.yaml`은 개발 서버와 분리된 18080 포트에서 백엔드(2 CPU·1 GiB),
+PostgreSQL 17(2 CPU·1 GiB), Redis 7.4(0.5 CPU·256 MiB), Redis exporter를 실행합니다.
+`.env.loadtest.isolated`에는 `LOADTEST_DB_PASSWORD`와 Base64 인코딩된 `LOADTEST_JWT_SECRET`을 넣고
+파일 권한을 600으로 설정합니다. 이 파일과 발급된 테스트 토큰은 Git에 포함하지 않습니다.
+
+```bash
+./gradlew bootJar
+docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml up -d --build
+python3 tests/performance/prepare-isolated-loadtest.py
+k6 run --summary-export /tmp/codeiary-isolated-k6-result.json tests/performance/blog-isolated-20-users.k6.js
+```
+
+준비 스크립트는 Docker DB에 사용자 20명과 글 40개를 만들고 각 사용자에게 자기 글 두 개를 배정합니다.
+위 명령은 40건을 한 번에 보내는 버스트 테스트입니다. 20명이 두 건씩 총 40건을
+약 2분에 나눠 보내려면 아래 명령을 사용합니다. 기존 `blog-update.k6.js`는
+20명이 2분 동안 반복 수정하므로 총 요청 수가 40건을 넘습니다.
+
+```bash
+k6 run --summary-export /tmp/codeiary-isolated-40-over-2m.json tests/performance/blog-isolated-40-over-2m.k6.js
+```
+
+사용자 40명이 각자 두 건씩 총 80건을 약 2분에 나눠 보내려면 격리 컨테이너를
+초기화한 뒤 아래 명령을 사용합니다. 준비 스크립트의 사용자 수와 k6 스크립트의
+요청 수가 일치해야 합니다.
+
+```bash
+docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml down
+docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml up -d --no-build
+LOADTEST_USERS=40 python3 tests/performance/prepare-isolated-loadtest.py
+k6 run --summary-export /tmp/codeiary-isolated-80-over-2m.json tests/performance/blog-isolated-80-over-2m.k6.js
+```
+
+테스트 인증 파일은 `/tmp/codeiary-loadtest-{사용자 수}-users.json`에 저장되며 30분 후 만료됩니다.
+Redis Stream은 `codeiary:blog:outbox`이고, 완료 상태는 DB의 `github_blog_outbox`에서 확인합니다.
+로컬 Prometheus가 `monitoring/local/prometheus.yml`로 백엔드와 exporter를 수집하면
+[Grafana](http://localhost:3000) Explore에서 아래 PromQL을 볼 수 있습니다.
+
+```promql
+redis_stream_group_lag{job="codeiary-loadtest-redis"}
+redis_stream_group_messages_pending{job="codeiary-loadtest-redis"}
+redis_memory_used_bytes{job="codeiary-loadtest-redis"}
+hikaricp_connections_pending{job="codeiary-isolated-loadtest"}
+```
+
+실험을 마치면 `docker compose --env-file .env.loadtest.isolated -f compose.loadtest.isolated.yaml down`으로
+격리 컨테이너를 삭제할 수 있습니다. PostgreSQL에 볼륨을 지정하지 않았으므로 테스트 DB 데이터도 삭제됩니다.
 
 OAuth 인증 자체의 실패는 `/auth/callback?error=oauth2`로 반환합니다.
 계정 연결 후 저장소 준비만 실패한 경우에는 `error=github_repository`로 돌아오며,
@@ -540,10 +589,11 @@ GitHub Actions 변수는 `EC2_AWS_ROLE_ARN`, `EC2_SSM_INSTANCE_ID`입니다.
 이 스크립트 변경 후에는 EC2의 `/usr/local/sbin/codeiary-deploy-api`에도 같은 버전을 반영해야 합니다.
 스크립트는 서울 리전 `/codeiary/prod/`의 `db-url`,
 `db-username`, `db-password`, `jwt-secret`, Google OAuth, GitHub App,
-`valkey-endpoint` 및 미디어 설정을 읽습니다. GitHub App 키는
+`redis/host`, `redis/port` 및 미디어 설정을 읽습니다. GitHub App 키는
 `github-app-private-key` SecureString에서 읽어 EC2의 `/opt/codeiary/secrets/`에 저장하고
 컨테이너에는 읽기 전용으로 마운트합니다. 다른 비밀값은 임시 환경 파일로 전달하고
-배포 종료 시 임시 파일을 삭제합니다. Valkey Serverless 연결에는 TLS와 클러스터 모드를 사용합니다.
+배포 종료 시 임시 파일을 삭제합니다. 노드형 Valkey 연결에는 TLS를 사용하며,
+`redis/host`와 `redis/port`를 애플리케이션에 전달합니다.
 S3 업로드는 EC2 IAM 역할과 버킷 정책으로 허용하며 정적 AWS 키를 사용하지 않습니다.
 
 운영 애플리케이션은 요청마다 trace ID와 사용자 ID를 MDC에 넣어 시작·종료 로그를 남기며, `X-Request-Id` 응답 헤더로 같은 요청을 확인할 수 있습니다. 4xx 응답은 `WARN`, 5xx 응답은 `ERROR` 레벨입니다.
