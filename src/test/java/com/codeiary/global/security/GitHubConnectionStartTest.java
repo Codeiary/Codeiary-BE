@@ -1,6 +1,8 @@
 package com.codeiary.global.security;
 
 import com.codeiary.domain.github.dto.GitHubLinkContext;
+import com.codeiary.domain.blog.fixture.BlogPostFixture;
+import com.codeiary.domain.blog.service.BlogPostService;
 import com.codeiary.domain.github.repository.GitHubConnectionRepository;
 import com.codeiary.global.security.handler.CustomOauth2SuccessHandler;
 import com.codeiary.global.security.repository.OAuth2RequestRepository;
@@ -52,6 +54,25 @@ class GitHubConnectionStartTest extends IntegrationTestSupport {
     @Autowired CustomOauth2SuccessHandler successHandler;
     @Autowired GitHubConnectionRepository connections;
     @Autowired GitHubConnectionService githubConnections;
+    @Autowired BlogPostService blogPosts;
+
+    @Test
+    void syncStatusIsVisibleOnlyToPostAuthor() throws Exception {
+        var author = users.saveAndFlush(UserFixture.create(Role.USER));
+        var other = users.saveAndFlush(User.create("sync-viewer@example.com", "방문자", Role.USER));
+        var post = blogPosts.create(author, BlogPostFixture.request());
+        var path = "/github/posts/" + post.id() + "/sync";
+
+        mvc.perform(get(path)).andExpect(status().isUnauthorized());
+        mvc.perform(get(path).cookie(new Cookie("access_token",
+                        sessions.createSession(other.getEmail()).accessToken())))
+                .andExpect(status().isNotFound());
+        mvc.perform(get(path).cookie(new Cookie("access_token",
+                        sessions.createSession(author.getEmail()).accessToken())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.connected").value(false))
+                .andExpect(jsonPath("$.status").isEmpty());
+    }
 
     @Test
     void rejectAnonymousAndPendingUsers() throws Exception {
@@ -70,7 +91,9 @@ class GitHubConnectionStartTest extends IntegrationTestSupport {
                         .param("userId", "999999"))
                 .andExpect(status().is3xxRedirection())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string(
-                        "Location", org.hamcrest.Matchers.startsWith("https://github.com/login/oauth/authorize?")))
+                        "Location", org.hamcrest.Matchers.allOf(
+                                org.hamcrest.Matchers.startsWith("https://github.com/login/oauth/authorize?"),
+                                org.hamcrest.Matchers.containsString("prompt=select_account"))))
                 .andReturn();
         MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
         assertThat(session).isNotNull();
@@ -187,6 +210,11 @@ class GitHubConnectionStartTest extends IntegrationTestSupport {
         assertThat(connections.findByUserId(first.getId())).isEmpty();
         mvc.perform(get("/github/connection").cookie(cookie))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.connected").value(false));
+        githubConnections.connect(new AuthInfo(com.codeiary.domain.user.entity.enums.OAuthProvider.GITHUB,
+                "456", null, "another-account", false, false),
+                new GitHubLinkContext(first.getId(), Instant.now()));
+        assertThat(connections.findByUserId(first.getId()).orElseThrow().getGithubLogin())
+                .isEqualTo("another-account");
     }
 
     @Test

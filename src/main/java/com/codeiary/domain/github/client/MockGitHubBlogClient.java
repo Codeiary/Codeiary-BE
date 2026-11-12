@@ -1,6 +1,6 @@
 package com.codeiary.domain.github.client;
 
-import com.codeiary.domain.github.entity.GitHubConnection;
+import com.codeiary.domain.github.dto.outbox.GitHubBlogSyncContent;
 import com.codeiary.global.logging.LogExecution;
 import java.time.Duration;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +24,7 @@ public class MockGitHubBlogClient implements GitHubBlogWriter {
     }
 
     @Override
-    public void sync(GitHubConnection connection, Long postId, String markdown) {
+    public void sync(GitHubBlogSyncContent content) {
         try {
             Thread.sleep(delay);
         } catch (InterruptedException exception) {

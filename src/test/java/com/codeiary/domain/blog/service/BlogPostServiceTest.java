@@ -6,7 +6,8 @@ import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.entity.Category;
 import com.codeiary.domain.blog.entity.Tag;
-import com.codeiary.domain.blog.event.BlogPostChanged;
+import com.codeiary.domain.github.entity.enums.EventType;
+import com.codeiary.domain.github.service.GitHubBlogOutboxService;
 import com.codeiary.domain.blog.repository.CategoryRepository;
 import com.codeiary.domain.blog.repository.TagRepository;
 import java.util.List;
@@ -30,12 +31,13 @@ import org.junit.jupiter.params.provider.EnumSource;
 import org.mapstruct.factory.Mappers;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.BDDMockito.willThrow;
@@ -50,12 +52,12 @@ class BlogPostServiceTest {
     @Mock private ImageUrlValidator imageUrls;
     @Mock private CategoryRepository categories;
     @Mock private TagRepository tags;
-    @Mock private ApplicationEventPublisher events;
+    @Mock private GitHubBlogOutboxService outbox;
     private BlogPostService service;
 
     @BeforeEach
     void setUp() {
-        service = new BlogPostService(posts, postLikes, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags, events);
+        service = new BlogPostService(posts, postLikes, Mappers.getMapper(BlogPostMapper.class), imageUrls, categories, tags, outbox);
     }
 
     @Test
@@ -89,20 +91,20 @@ class BlogPostServiceTest {
         assertThat(response.author().nickname()).isEqualTo("기록자");
         assertThat(response.author().profileImageUrl()).isEqualTo(user.getProfileImageUrl());
         then(imageUrls).shouldHaveNoInteractions();
-        then(events).should().publishEvent(new BlogPostChanged(BlogPostFixture.ID, user.getId()));
+        then(outbox).should().savePendingChange(any(BlogPost.class), eq(EventType.CREATED), isNull());
     }
 
     @Test
-    void updateAndDeletePublishPostIdentityForAfterCommitSync() {
+    void updateAndDeleteRecordOutboxWork() {
         var user = UserFixture.createWithId();
         var post = BlogPostFixture.createWithId(user, true);
         given(posts.findById(post.getId())).willReturn(Optional.of(post));
         given(categories.findByAuthorIdAndName(user.getId(), "Java")).willReturn(post.getCategory());
         service.update(post.getId(), user, new BlogPostRequest("수정", "본문", "Java", List.of(), null, false));
-        then(events).should().publishEvent(new BlogPostChanged(post.getId(), user.getId()));
-        clearInvocations(events);
+        then(outbox).should().savePendingChange(post, EventType.UPDATED, "Java/첫 기록-10.md");
+        clearInvocations(outbox);
         service.delete(post.getId(), user);
-        then(events).should().publishEvent(new BlogPostChanged(post.getId(), user.getId()));
+        then(outbox).should().savePendingChange(post, EventType.DELETED, "Java/수정-10.md");
     }
 
     @ParameterizedTest
@@ -123,7 +125,7 @@ class BlogPostServiceTest {
                 .isInstanceOfSatisfying(RestApiException.class,
                         error -> assertThat(error.getErrorCode()).isEqualTo(BlogErrorCode.POST_ACCESS_DENIED));
         then(posts).should(never()).delete(any());
-        then(events).shouldHaveNoInteractions();
+        then(outbox).shouldHaveNoInteractions();
     }
 
     @Test
@@ -154,6 +156,6 @@ class BlogPostServiceTest {
                 .isInstanceOf(RestApiException.class);
         assertThat(post.getTitle()).isEqualTo("첫 기록");
         assertThat(post.isPublicPost()).isTrue();
-        then(events).shouldHaveNoInteractions();
+        then(outbox).shouldHaveNoInteractions();
     }
 }

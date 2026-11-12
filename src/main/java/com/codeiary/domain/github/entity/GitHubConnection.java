@@ -12,6 +12,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
@@ -41,11 +42,14 @@ public class GitHubConnection extends TimeBaseEntity {
     @Column(length = 255)
     private String branch;
 
+    @Builder(access = AccessLevel.PRIVATE)
+    private GitHubConnection(User user, Long githubUserId) {
+        this.user = user;
+        this.githubUserId = githubUserId;
+    }
+
     public static GitHubConnection create(User user, Long githubUserId) {
-        var connection = new GitHubConnection();
-        connection.user = user;
-        connection.githubUserId = githubUserId;
-        return connection;
+        return GitHubConnection.builder().user(user).githubUserId(githubUserId).build();
     }
 
     public void connect(String login) {
