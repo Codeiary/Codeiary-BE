@@ -27,3 +27,14 @@ Alloy에는 Docker 소켓을 마운트하지 않아 Docker 데몬 제어 권한�
 
 운영 DB는 기존 데이터와 Flyway 이력을 유지합니다. 마이그레이션은 `src/main/resources/db/migration/`에서 버전별로 관리합니다.
 `compose.yaml`은 로컬 개발용 PostgreSQL만 실행하며 운영 배포에는 사용하지 않습니다.
+
+## GitHub App 설정
+
+OAuth 콜백은 `/login/oauth2/code/github`로 등록한다. 앱 설치 화면의 `Request user authorization (OAuth) during installation`은 끈다. 설치 후 이동 주소는 `Setup URL`에서 별도로 지정한다.
+
+GitHub에서 받은 개인 키가 `BEGIN RSA PRIVATE KEY` 형식이면 PKCS#8로 변환한다. 개인 키는 Git·이미지·로그에 넣지 않는다.
+
+```bash
+openssl pkcs8 -topk8 -nocrypt -in github-app.pem -out github-app-pkcs8.pem
+chmod 600 github-app-pkcs8.pem
+```

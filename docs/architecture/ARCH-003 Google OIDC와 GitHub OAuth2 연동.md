@@ -1,191 +1,74 @@
 # ARCH-003 Google OIDC와 GitHub OAuth2 연동
 
-Google은 **Codeiary 로그인**, GitHub는 **로그인한 사용자의 계정 연동**에 사용합니다.
-두 흐름 모두 Spring Security의 OAuth 시작 경로와 콜백 처리를 사용하며,
-별도의 GitHub 인증 시작 API는 두지 않습니다.
+## 두 인증의 역할
 
-| 구분 | Google | GitHub |
+| | Google | GitHub |
 | --- | --- | --- |
-| 목적 | 사용자 조회·가입 후 로그인 | 기존 Codeiary 사용자에게 GitHub 계정 연결 |
-| 방식 | OAuth2 + OIDC | OAuth2 |
-| 시작 경로 | `GET /oauth2/authorization/google` | `GET /oauth2/authorization/github` |
-| 콜백 경로 | `/login/oauth2/code/google` | `/login/oauth2/code/github` |
-| 시작 조건 | 비로그인 사용자도 가능 | 로그인한 USER·ADMIN만 가능 |
-| 사용자 조회 | `CustomOidcUserService` | `CustomOAuth2UserService` |
-| 성공 결과 | 서비스 JWT 쿠키 발급 | `github_connection` 저장, 서비스 JWT 추가 발급 없음 |
+| 목적 | Codeiary 로그인 | 로그인한 사용자에게 GitHub 계정 연결 |
+| 방식 | OIDC | OAuth2 |
+| 시작 | `/oauth2/authorization/google` | `/oauth2/authorization/github` |
+| 콜백 | `/login/oauth2/code/google` | `/login/oauth2/code/github` |
+| 결과 | 사용자 조회·가입 후 Codeiary JWT 쿠키 발급 | `github_connection` 저장, Codeiary JWT 추가 발급 없음 |
 
-## 공통 처리 구조
+두 경로 모두 Spring Security의 OAuth 흐름을 사용한다. GitHub만을 위한 별도 시작 API는 없다.
 
-```mermaid
-flowchart TD
-    Browser["브라우저"] --> Start["Spring OAuth 시작 경로"]
-    Start --> Resolver["기본 Resolver 빈<br/>state 생성 · GitHub 연동 사용자 정보 추가"]
-    Resolver --> Session["OAuth2RequestRepository<br/>인증 요청을 임시 세션에 저장"]
-    Session --> Provider["Google 또는 GitHub 인증"]
-    Provider --> Callback["Spring OAuth 콜백 처리<br/>state 검증 · code 교환 · 사용자 정보 조회"]
-    Callback --> Handler["CustomOauth2SuccessHandler"]
-    Handler --> Account["OAuthAccountService.complete"]
-    Account -->|Google| Login["사용자 조회·가입<br/>TokenSessionService: 서비스 JWT 발급"]
-    Account -->|GitHub| Link["GitHubConnectionService<br/>기존 사용자와 GitHub 계정 연결"]
-    Login --> DB[(PostgreSQL)]
-    Link --> DB
-    Link --> Repository["GitHubRepositoryService<br/>CodeiaryBlog 자동 생성 · 설치 권한 확인"]
-    Repository --> DB
-    Handler --> Frontend["프론트 /auth/callback으로 복귀"]
-```
-
-`OAuthAccountService`는 `global/security/service`에 두고 인증 성공 후 처리를 모읍니다.
-Google 사용자 조회·가입은 내부 `getOrCreate()`에서 처리하고,
-GitHub 연결의 저장·조회·해제는 `domain/github`의 `GitHubConnectionService`가 담당합니다.
-성공 핸들러는 서비스를 호출하고, 반환된 서비스 JWT가 있을 때만 쿠키를 작성합니다.
-
-## Google 로그인 흐름
+## 공통 흐름
 
 ```mermaid
-sequenceDiagram
-    participant Browser as 브라우저
-    participant API as 백엔드
-    participant Session as 임시 세션
-    participant Google as Google
-    participant DB as PostgreSQL
-
-    Browser->>API: GET /oauth2/authorization/google
-    API->>Session: OAuth 인증 요청 저장 (state 등)
-    API-->>Browser: Google 인증 주소로 리다이렉트
-    Browser->>Google: 로그인·동의
-    Google-->>Browser: 콜백 주소로 리다이렉트 (code, state)
-    Browser->>API: GET /login/oauth2/code/google (세션 쿠키 포함)
-    API->>Session: state 대조 후 인증 요청 꺼내기·삭제
-    API->>Google: code로 토큰 요청
-    Google-->>API: ID Token · Access Token
-    API->>API: Spring OIDC 검증 · CustomOidcUserService 프로필 변환
-    API->>API: OAuthAccountService.complete → getOrCreate
-    API->>DB: 기존 사용자 조회 또는 신규 사용자 저장
-    API->>API: TokenSessionService: 서비스 JWT 생성
-    API->>DB: Refresh Token 해시 저장
-    API-->>Browser: 서비스 JWT HttpOnly 쿠키 + 프론트 /auth/callback 이동
+flowchart LR
+    B[브라우저] --> A[Spring OAuth 시작 경로]
+    A --> S[(임시 세션: state와 인증 요청)]
+    A --> P[Google 또는 GitHub]
+    P --> C[Spring OAuth 콜백]
+    S --> C
+    C --> U[사용자 정보 조회·변환]
+    U --> H[성공 핸들러]
+    H --> O[OAuthAccountService]
+    O -->|Google| L[로그인·JWT 발급]
+    O -->|GitHub| G[계정 연결·저장소 준비]
 ```
 
-Google 응답은 `GoogleOAuth2Response`가 공통 `AuthInfo`로 변환하는 데 필요한 값을 제공합니다.
-기존 계정은 Google의 `sub`로 식별하고, 최초 가입자는 `PENDING` 권한으로 생성합니다.
+임시 세션은 로그인 상태를 유지하는 수단이 아니다. OAuth 왕복 중 `state`와 시작 요청을 대조하는 데 사용한다. 로그인 후 일반 API는 Codeiary JWT 쿠키로 인증한다.
 
-## GitHub 연동 흐름
+## Google: 서비스 로그인
 
-```mermaid
-sequenceDiagram
-    participant Browser as 브라우저
-    participant API as 백엔드
-    participant Session as 임시 세션
-    participant GitHub as GitHub
-    participant DB as PostgreSQL
+1. 비로그인 사용자도 `/oauth2/authorization/google`에서 시작할 수 있다.
+2. Google 콜백에서 Spring이 `state`와 OIDC ID Token을 검증한다.
+3. `CustomOidcUserService`가 Google 정보를 `AuthInfo`로 변환한다.
+4. `OAuthAccountService`가 Google `sub`로 기존 사용자를 찾거나 새 사용자를 만든다. 신규 사용자는 `PENDING` 권한을 받는다.
+5. `TokenSessionService`가 Codeiary JWT를 발급한다. 성공 핸들러는 이를 `HttpOnly` 쿠키로 쓰고 프론트의 `/auth/callback`으로 돌려보낸다.
 
-    Browser->>API: GET /oauth2/authorization/github (서비스 Access Token 쿠키)
-    API->>DB: TokenAuthenticationFilter: 로그인 사용자 확인
-    API->>API: USER·ADMIN 권한 확인
-    API->>Session: OAuth 요청 저장 (state, GitHubLinkContext)
-    Note over API,Session: GitHubLinkContext = Codeiary 사용자 ID + 시작 시간
-    API-->>Browser: GitHub 인증 주소로 리다이렉트
-    Browser->>GitHub: 계정 인증·동의
-    GitHub-->>Browser: 콜백 주소로 리다이렉트 (code, state)
-    Browser->>API: GET /login/oauth2/code/github (세션 쿠키 포함)
-    API->>Session: state 대조 후 인증 요청 꺼내기·삭제
-    Note over API,Session: 꺼낸 요청은 현재 HTTP 요청에 보관해 성공 핸들러에 전달
-    API->>GitHub: code로 토큰 요청
-    GitHub-->>API: GitHub Access Token
-    API->>GitHub: 인증된 사용자 조회
-    GitHub-->>API: GitHub 사용자 ID · login
-    API->>API: CustomOAuth2UserService → GitHubOAuth2Response
-    API->>API: OAuthAccountService.complete → GitHubConnectionService.connect
-    API->>DB: 사용자 행 잠금 · 활성 상태 확인 · 계정 연결 커밋
-    API->>GitHub: 내 CodeiaryBlog 조회 · 없으면 비공개 저장소 생성
-    GitHub-->>API: 저장소 ID · 이름 · 기본 브랜치
-    API->>GitHub: 앱 설치 및 저장소 쓰기 권한 확인
-    API->>DB: 연결 ID 재확인 · 저장소 정보 저장
-    API-->>Browser: 프론트 /auth/callback 이동 (서비스 JWT 추가 발급 없음)
-```
+Google의 검증된 이메일만 가입·연결에 사용한다. 기존 계정에 이메일로 연결할 때는 검증된 Gmail 주소 또는 Google Workspace의 `hd` 정보를 요구한다. 자세한 토큰 수명과 재발급 규칙은 [인증 문서](../guides/authentication.md)에 있다.
 
-GitHub 시작 요청은 토큰 필터가 OAuth 리다이렉트 필터보다 먼저 처리합니다.
-미로그인은 401, 온보딩 전 사용자는 403으로 차단합니다.
-콜백에서는 시작할 때 보관한 Codeiary 사용자 ID를 사용하며,
-연동 정보가 없거나 시작 후 10분이 지나면 연결하지 않습니다.
-GitHub 계정의 식별에는 변경 가능한 `login` 대신 숫자 사용자 ID를 사용하고,
-사용자 ID와 GitHub 사용자 ID의 UNIQUE 제약으로 중복 연결을 막습니다.
+## GitHub: 기존 사용자 계정 연결
 
-임시 세션은 OAuth 왕복 요청의 `state`와 연동 시작 정보를 보관하는 용도입니다.
-로그인 완료 후 일반 API 요청은 서비스 JWT 쿠키로 인증합니다.
-`STATELESS` 설정과 OAuth 인증 과정의 임시 세션 사용은 구분합니다.
+1. 로그인한 `USER` 또는 `ADMIN`이 `/oauth2/authorization/github`에서 시작한다. 인증 필터가 OAuth 리다이렉트 필터보다 먼저 Codeiary JWT를 확인한다.
+2. 시작 요청에 Codeiary 사용자 ID와 시각을 담은 `GitHubLinkContext`를 넣고, OAuth 요청과 `state`를 임시 세션에 보관한다.
+3. 콜백에서 Spring이 `state`를 확인하고 GitHub 사용자 정보를 가져온다. `CustomOAuth2UserService`가 이를 `AuthInfo`로 변환한다.
+4. `GitHubConnectionService`가 시작 당시의 Codeiary 사용자와 GitHub의 **숫자 사용자 ID**를 연결한다. 시작 정보가 없거나 10분이 지났으면 거부한다.
+5. `GitHubRepositoryService`가 개인 계정의 `CodeiaryBlog` 저장소를 준비하고 앱 설치 권한을 확인한다.
+6. 성공 핸들러가 프론트의 `/auth/callback`으로 돌려보낸다. 이 과정에서는 Codeiary JWT를 새로 발급하지 않는다.
 
-| 메서드 | 경로 | 동작 |
-| --- | --- | --- |
-| GET | `/github/connection` | 계정·CodeiaryBlog 연결 정보 조회 |
-| DELETE | `/github/connection` | 내 연결 정보와 Spring Authorized Client 삭제 |
+비로그인 시작 요청은 401, 온보딩 전 사용자의 요청은 403이다. GitHub 로그인명은 바뀔 수 있으므로 계정 식별에는 숫자 ID를 사용한다. 사용자 ID와 GitHub 사용자 ID의 UNIQUE 제약이 중복 연결을 막는다.
 
-GitHub OAuth 인증을 마치면 백엔드가 바로 개인 계정의 **CodeiaryBlog** 저장소를 준비합니다.
-이름을 입력하거나 저장소 목록에서 선택하는 단계는 없습니다.
+### CodeiaryBlog 준비
 
-1. Spring OAuth에서 이미 검증한 GitHub 숫자 ID와 현재 로그인명을 재사용합니다. `/user`를 다시 조회하지 않습니다.
-2. `/repos/{현재 로그인명}/CodeiaryBlog`이 있으면 재사용합니다.
-3. 없다면 `POST /user/repos`로 비공개(`private: true`) 저장소를 README와 함께 생성합니다.
-4. 앱 설치 목록을 순차 조회해 저장소 소유자·이름·상태와 Contents 쓰기 권한을 확인합니다.
-   해당 설치에서 저장소에 실제로 쓸 수 있는지 검증한 뒤 연결 정보를 저장합니다.
+GitHub App에는 `Metadata: Read`, `Contents: Read & Write`, `Repository creation: Write` 권한이 필요하다.
 
-외부 HTTP 호출은 기존 RestClient로 순차 처리합니다. OAuth에서 받은 사용자 정보를 재사용해 중복 조회를 제거합니다.
-외부 요청이 실패하면 원래 도메인 오류로 전달하고 저장소 연결을 저장하지 않습니다.
-저장소 생성 자체는 GitHub의 원격 작업이므로 다른 조회가 실패해도 생성된 저장소는 남을 수 있고,
-다음 OAuth 시도에서 동일 저장소를 재사용합니다.
+- 내 저장소가 이미 있으면 재사용한다. 없으면 비공개 저장소를 만든다.
+- 앱 설치가 이 저장소에 `Contents: Write` 권한을 가졌는지 확인한 뒤 설치 ID를 저장한다.
+- 저장소는 만들어졌지만 설치 승인이 없으면 설치 ID는 비어 있다. 프론트는 이를 연동 완료로 표시하지 않는다.
+- 설치 승인 후 다시 GitHub 연동을 시작하면 기존 저장소를 재사용한다. 앱 설치 화면에서는 `Only select repositories`로 `CodeiaryBlog`만 허용한다.
 
-기존 저장소의 파일·공개 설정은 변경하지 않습니다. 생성이 겹쳐 422가 반환되면 한 번 다시 조회하며,
-접근할 수 없는 동명 저장소를 덮어쓰거나 이름을 바꿔 추가 생성하지 않습니다.
-계정 연결은 먼저 커밋하고 외부 GitHub API를 호출하므로 원격 호출 동안 DB 행 잠금을 잡지 않습니다.
-마지막 저장 시에는 연결 ID와 GitHub 사용자 ID를 다시 확인해 중간에 해제·재연동된 연결을 덮어쓰지 않습니다.
+저장소 생성과 DB 저장은 하나의 트랜잭션이 아니다. 저장소를 만든 뒤 다른 단계가 실패하면 다음 시도에서 같은 저장소를 재사용한다. 외부 GitHub 호출 중에는 사용자 행의 DB 잠금을 유지하지 않는다.
 
-앱에는 `Metadata: Read`, `Contents: Read & Write`, `Repository creation: Write`가 필요합니다.
-개인 계정의 CodeiaryBlog만 연결 대상으로 사용합니다. 저장소는 만들었지만 설치 승인이 아직 없거나
-해당 설치에 저장소가 포함되지 않았다면 `repository.installationId`는 null입니다.
-프론트는 이 상태를 **연동 완료**로 표시하지 않습니다.
-권한 승인 후 GitHub 연결을 다시 진행하면 OAuth 콜백에서 같은 저장소를 재사용해 설치 정보를 채웁니다.
-앱 설치 승인은 사용자가 직접 진행하며 `Only select repositories`에서 CodeiaryBlog만 허용합니다.
-설치 콜백의 `installation_id`만 믿고 연결을 생성하지 않습니다.
+### 연결 상태와 실패
 
-OAuth를 먼저 마치는 흐름이므로 GitHub App 등록 화면의
-`Request user authorization (OAuth) during installation`은 끄고 설치 후 안내용 `Setup URL`을 사용합니다.
-예를 들어 `https://codeiary.com/home`으로 설정할 수 있으며,
-OAuth Callback URL(`/login/oauth2/code/github`)은 기존대로 유지합니다.
-설치 중 OAuth까지 요청하면 Spring이 시작하지 않은 콜백이 발생해 실패할 수 있습니다.
-프로필에는 별도의 저장소 준비·선택·권한 확인 버튼을 두지 않습니다.
-GitHub 연결 버튼은 OAuth 시작 주소로만 이동하고, 저장소 준비는 OAuth 완료 서비스에서 자동 실행합니다.
+| 상황 | 처리 |
+| --- | --- |
+| OAuth 인증 실패 | `/auth/callback?error=oauth2` |
+| 계정 연결 후 저장소 준비 실패 | `/auth/callback?error=github_repository`; 기존 Codeiary 로그인은 유지 |
+| GitHub OAuth 토큰 만료·서버 재시작 | 저장소 준비를 다시 하려면 GitHub 재인증 필요 |
+| 연동 해제 | DB 연결과 Spring Authorized Client 삭제; 원격 저장소는 유지 |
 
-GitHub OAuth 토큰은 Spring의 메모리 Authorized Client 저장소를 사용합니다.
-서버 재시작·만료 후 저장소 준비를 다시 하려면 `GITHUB_REAUTH_REQUIRED`(409)에 따라 GitHub 재인증이 필요하며,
-기존 Codeiary 로그인과 DB 연결 정보는 삭제하지 않습니다. 연동 해제도 원격 저장소를 삭제하지 않습니다.
-원격 저장소 생성과 로컬 DB 저장은 하나의 트랜잭션이 아니므로, DB 저장 실패 후 재시도해도 같은 저장소를 재사용합니다.
-글 저장·수정·삭제 시 같은 DB 트랜잭션에 GitHub 동기화 작업을 아웃박스로 기록합니다.
-발행자가 Redis Stream에 작업 ID를 넣고 소비자가 GitHub에 반영합니다.
-공개 글의 파일 경로는 `{카테고리}/{제목}-{글 ID}.md`이며 제목과 Markdown 본문을 전송합니다.
-제목이나 카테고리를 바꾸면 이전 경로의 파일을 정리합니다.
-비공개 전환·글 삭제 시 현재 파일을 삭제하지만 Git 커밋 이력에 이미 올라간 내용은 남습니다.
-동일한 내용은 커밋하지 않습니다. 앱 설치 토큰은 매 작업마다 해당 저장소와 Contents write로 제한해 발급하므로
-설치 권한을 철회하면 이후 전송은 거부됩니다. 설치 웹훅은 구현하지 않았습니다.
-모든 응답은 `Cache-Control: no-store`이며 토큰과 외부 API 응답 원문을 오류 로그에 남기지 않습니다.
-
-설정에는 `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL`를 사용합니다.
-저장소 생성에는 개인 키가 필요하지 않지만, 재시작 후에도 동작하는 자동 푸시에는 GitHub App 개인 키가 필요합니다.
-로컬에서는 `GITHUB_APP_PRIVATE_KEY_PATH`에 PKCS#8 PEM 파일의 절대 경로를 설정합니다.
-운영 배포는 Parameter Store의 `github-app-private-key`를 컨테이너가 읽을 수 있는 파일로 저장하고
-해당 파일을 읽기 전용으로 마운트합니다.
-GitHub에서 받은 파일이 `BEGIN RSA PRIVATE KEY` 형식이면 다음과 같이 변환합니다.
-
-```bash
-openssl pkcs8 -topk8 -nocrypt -in github-app.pem -out github-app-pkcs8.pem
-chmod 600 github-app-pkcs8.pem
-```
-
-Docker에서는 파일을 컨테이너에 읽기 전용으로 마운트하고 환경변수에는 컨테이너 내부 경로를 지정합니다.
-개인 키는 Git·이미지·로그에 포함하지 않습니다. OAuth Client Secret과는 다른 자격 증명입니다.
-GitHub 전송은 요청의 DB 트랜잭션 밖에서 실행합니다. 전송 실패는 아웃박스에 남아 재시도됩니다.
-GitHub 커밋과 DB는 분산 트랜잭션이 아니므로 두 시스템의 반영 시점은 다를 수 있습니다.
-동시 요청은 GitHub 커밋 충돌과 API 호출 제한의 영향을 받으므로 부하 테스트는 외부 API 스텁을 우선 사용합니다.
-
-OAuth 인증 자체의 실패는 `/auth/callback?error=oauth2`로 반환합니다.
-계정 연결 후 저장소 준비만 실패한 경우에는 `error=github_repository`로 돌아오며,
-프론트는 기존 Codeiary 로그인 세션을 복원하고 실패를 안내합니다. GitHub 연결을 다시 시도할 수 있습니다.
+GitHub OAuth 토큰은 Spring의 메모리 Authorized Client 저장소에 둔다. 자동 푸시는 별도의 GitHub App 설치 토큰을 사용하며, 앱 개인 키가 필요하다. 이 두 자격 증명은 OAuth Client Secret과도 다르다. 글 저장 후 아웃박스와 Redis Stream을 거쳐 GitHub에 반영하는 과정은 [ARCH-001](<ARCH-001 블로그 글 깃허브 자동화 설계.md>)에서 설명한다.
