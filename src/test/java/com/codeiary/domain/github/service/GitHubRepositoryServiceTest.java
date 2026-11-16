@@ -11,6 +11,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -36,6 +37,7 @@ class GitHubRepositoryServiceTest {
     @InjectMocks GitHubRepositoryService service;
     private final Account owner = new Account(123, "octocat");
 
+    @DisplayName("설치 조회 실패 시 도메인 오류를 유지하고 저장소 저장을 막을 수 있다.")
     @Test
     void installationFailurePreservesDomainErrorAndDoesNotSaveRepository() {
         token();
@@ -47,6 +49,7 @@ class GitHubRepositoryServiceTest {
         verify(client, never()).repositories(anyString(), anyLong(), anyInt());
     }
 
+    @DisplayName("계정 소속 정보가 없으면 설치 연결 완료를 막을 수 있다.")
     @Test
     void missingMembershipStillPreventsCompletedInstallationLink() {
         token();
@@ -59,6 +62,7 @@ class GitHubRepositoryServiceTest {
         verify(connectionService).saveRepository(1L, 5L, 123L, null, repository);
     }
 
+    @DisplayName("토큰이 없으면 GitHub 호출 없이 재인증을 요청할 수 있다.")
     @Test
     void missingTokenRequiresGithubReauthenticationWithoutCallingGithub() {
         connection();
@@ -66,6 +70,7 @@ class GitHubRepositoryServiceTest {
         verifyNoInteractions(client, connectionService);
     }
 
+    @DisplayName("만료된 토큰에 재인증을 요청할 수 있다.")
     @Test
     void expiredTokenRequiresReauthentication() {
         token(Instant.now().minusSeconds(1));
@@ -73,6 +78,7 @@ class GitHubRepositoryServiceTest {
         verifyNoInteractions(client);
     }
 
+    @DisplayName("사용자 선택 없이 고정 저장소를 만들고 GitHub 정보를 저장할 수 있다.")
     @Test
     void createsFixedRepositoryAndSavesGithubValuesWithoutRequiringUserSelection() {
         token();
@@ -85,6 +91,7 @@ class GitHubRepositoryServiceTest {
         verify(connectionService).saveRepository(1L, 5L, 123L, 10L, repository);
     }
 
+    @DisplayName("설치 권한이 없는 새 저장소를 권한 대기 상태로 저장할 수 있다.")
     @Test
     void createdRepositoryWithoutInstallationIsSavedAsPendingPermission() {
         token();
@@ -95,6 +102,7 @@ class GitHubRepositoryServiceTest {
         verify(connectionService).saveRepository(1L, 5L, 123L, null, repository);
     }
 
+    @DisplayName("다른 계정의 저장소 연결을 거절할 수 있다.")
     @Test
     void neverLinksRepositoryOwnedBySomeoneElse() {
         token();
@@ -104,6 +112,7 @@ class GitHubRepositoryServiceTest {
         verifyNoInteractions(connectionService);
     }
 
+    @DisplayName("다른 계정이나 중단된 설치를 무시할 수 있다.")
     @Test
     void ignoresForeignOrSuspendedInstallationsAndNeverGrantsInstallationFromAnotherAccount() {
         token();

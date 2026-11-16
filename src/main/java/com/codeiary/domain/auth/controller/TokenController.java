@@ -4,7 +4,7 @@ import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.cookie.TokenCookieManager;
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class TokenController {
 
-    private final TokenSessionService sessions;
+    private final TokenService tokenService;
     private final TokenCookieManager cookies;
 
     @Operation(summary = "토큰 재발급", description = "Refresh Token 쿠키를 교체하고 새 Access Token 쿠키를 발급합니다.")
@@ -31,7 +31,7 @@ public class TokenController {
     public void reissue(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
         try {
-            TokenPair pair = sessions.reissue(cookies.refreshToken(request).orElse(null));
+            TokenPair pair = tokenService.reissue(cookies.refreshToken(request).orElse(null));
             cookies.writeTokens(response, pair);
         } catch (RestApiException exception) {
             cookies.clearTokens(response);
@@ -44,7 +44,7 @@ public class TokenController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void logout(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
-        sessions.logout(cookies.refreshToken(request).orElse(null), cookies.accessToken(request).orElse(null));
+        tokenService.logout(cookies.refreshToken(request).orElse(null), cookies.accessToken(request).orElse(null));
         cookies.clearTokens(response);
     }
 }

@@ -33,7 +33,7 @@ class CommentServiceTest {
     @InjectMocks private CommentService service;
 
     @Test
-    @DisplayName("존재하지 않는 부모 댓글에는 답글을 작성할 수 없다.")
+    @DisplayName("존재하지 않는 부모 댓글에 답글 작성을 거절할 수 있다.")
     void rejectMissingReplyParent() {
         // given
         User author = UserFixture.createWithId(Role.USER);

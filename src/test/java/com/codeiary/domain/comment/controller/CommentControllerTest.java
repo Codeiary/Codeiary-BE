@@ -4,7 +4,7 @@ import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.blog.entity.Category;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.blog.repository.CategoryRepository;
-import com.codeiary.domain.auth.provider.JwtTokenProvider;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.comment.repository.CommentRepository;
 import com.codeiary.domain.comment.entity.CommentTargetType;
 import com.codeiary.domain.user.entity.User;
@@ -13,7 +13,6 @@ import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.support.IntegrationTestSupport;
 import jakarta.servlet.http.Cookie;
-import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +40,7 @@ class CommentControllerTest extends IntegrationTestSupport {
     @Autowired private BlogPostRepository posts;
     @Autowired private CategoryRepository categories;
     @Autowired private CommentRepository comments;
-    @Autowired private JwtTokenProvider tokens;
+    @Autowired private TokenService tokenService;
 
     @Test
     @DisplayName("댓글과 한 단계 답글을 작성·수정·삭제하고 조회할 수 있다.")
@@ -147,7 +146,6 @@ class CommentControllerTest extends IntegrationTestSupport {
     }
 
     private Cookie accessCookie(User user) {
-        return new Cookie("access_token", tokens.generateTokenPair(
-                user.getId(), user.getRole().name(), UUID.randomUUID()).accessToken());
+        return new Cookie("access_token", tokenService.login(user.getEmail()).accessToken());
     }
 }

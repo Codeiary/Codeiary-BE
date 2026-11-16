@@ -1,13 +1,15 @@
 package com.codeiary.global.security.filter;
 
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.entity.enums.Role;
 import com.codeiary.domain.user.fixture.UserFixture;
+import com.codeiary.global.exception.CommonErrorCode;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.exception.TokenErrorCode;
 import com.codeiary.domain.auth.fixture.TokenFixture;
 import com.codeiary.domain.auth.cookie.TokenCookieManager;
+import com.codeiary.global.security.exception.SecurityErrorHandler;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.http.Cookie;
 import java.util.List;
@@ -35,10 +37,13 @@ import static org.mockito.BDDMockito.then;
 class TokenAuthenticationFilterTest {
 
     @Mock
-    private TokenSessionService sessions;
+    private TokenService tokenService;
 
     @Mock
     private FilterChain chain;
+
+    @Mock
+    private SecurityErrorHandler errors;
 
     private TokenAuthenticationFilter filter;
     private MockHttpServletRequest request;
@@ -48,7 +53,7 @@ class TokenAuthenticationFilterTest {
     void setUp() {
         SecurityContextHolder.clearContext();
         TokenCookieManager cookies = TokenFixture.cookies("");
-        filter = new TokenAuthenticationFilter(cookies, sessions);
+        filter = new TokenAuthenticationFilter(cookies, tokenService, errors);
         request = new MockHttpServletRequest();
         request.setServletPath("/users/me");
         response = new MockHttpServletResponse();
@@ -65,7 +70,7 @@ class TokenAuthenticationFilterTest {
         // given
         User user = UserFixture.createWithId(Role.ADMIN);
         request.setCookies(new Cookie("access_token", "valid-access"));
-        given(sessions.authenticate("valid-access")).willReturn(user);
+        given(tokenService.authenticate("valid-access")).willReturn(user);
 
         // when
         filter.doFilter(request, response, chain);
@@ -79,7 +84,7 @@ class TokenAuthenticationFilterTest {
         assertThat(authentication.getAuthorities())
                 .extracting(GrantedAuthority::getAuthority)
                 .containsExactly("ROLE_ADMIN");
-        then(sessions).should().authenticate("valid-access");
+        then(tokenService).should().authenticate("valid-access");
         then(chain).should().doFilter(request, response);
     }
 
@@ -89,7 +94,7 @@ class TokenAuthenticationFilterTest {
         // given
         request.setCookies(new Cookie("access_token", "rejected-access"));
         setExistingAuthentication();
-        given(sessions.authenticate("rejected-access"))
+        given(tokenService.authenticate("rejected-access"))
                 .willThrow(new RestApiException(TokenErrorCode.TOKEN_REVOKED));
 
         // when
@@ -97,25 +102,23 @@ class TokenAuthenticationFilterTest {
 
         // then
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        then(sessions).should().authenticate("rejected-access");
+        then(tokenService).should().authenticate("rejected-access");
         then(chain).should().doFilter(request, response);
     }
 
     @Test
-    @DisplayName("토큰 형식 오류의 인증을 지우고 요청을 계속할 수 있다.")
-    void clearMalformedAuthentication() throws Exception {
-        // given
-        request.setCookies(new Cookie("access_token", "malformed-access"));
-        setExistingAuthentication();
-        given(sessions.authenticate("malformed-access"))
-                .willThrow(new RestApiException(TokenErrorCode.TOKEN_INVALID));
+    @DisplayName("블랙리스트 조회가 실패하면 500을 응답하고 요청을 멈출 수 있다.")
+    void handleBlacklistLookupFailure() throws Exception {
+        request.setCookies(new Cookie("access_token", "valid-access"));
+        RestApiException failure = new RestApiException(CommonErrorCode.INTERNAL_SERVER_ERROR);
+        given(tokenService.authenticate("valid-access"))
+                .willThrow(failure);
 
-        // when
         filter.doFilter(request, response, chain);
 
-        // then
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        then(chain).should().doFilter(request, response);
+        then(errors).should().handleServerError(response, failure);
+        then(chain).shouldHaveNoInteractions();
     }
 
     @Test
@@ -129,7 +132,7 @@ class TokenAuthenticationFilterTest {
 
         // then
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        then(sessions).shouldHaveNoInteractions();
+        then(tokenService).shouldHaveNoInteractions();
         then(chain).should().doFilter(request, response);
     }
 
@@ -147,7 +150,7 @@ class TokenAuthenticationFilterTest {
 
         // then
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
-        then(sessions).shouldHaveNoInteractions();
+        then(tokenService).shouldHaveNoInteractions();
         then(chain).should().doFilter(request, response);
     }
 

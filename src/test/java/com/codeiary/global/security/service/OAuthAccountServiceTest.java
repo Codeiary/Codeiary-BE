@@ -8,9 +8,9 @@ import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.global.exception.ErrorCode;
 import com.codeiary.global.exception.RestApiException;
-import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.global.security.dto.AuthInfo;
 import com.codeiary.domain.auth.dto.TokenPair;
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.github.service.GitHubConnectionService;
 import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
 import java.time.Instant;
@@ -48,7 +48,7 @@ import static org.mockito.Mockito.never;
 class OAuthAccountServiceTest {
 
     @Mock private UserRepository users;
-    @Mock private TokenSessionService sessions;
+    @Mock private TokenService tokenService;
     @Mock private GitHubConnectionService githubConnections;
     @Mock private com.codeiary.domain.github.service.GitHubRepositoryService githubRepositories;
     @Mock private org.springframework.transaction.PlatformTransactionManager transactions;
@@ -66,7 +66,7 @@ class OAuthAccountServiceTest {
         existing.linkOAuthAccount(OAuthProvider.GOOGLE, subject);
         given(users.findByOauthProviderAndOauthSubject(OAuthProvider.GOOGLE, subject)).willReturn(Optional.of(existing));
         AuthInfo profile = authInfo("changed@gmail.com", true, true);
-        given(sessions.createSession(UserFixture.EMAIL)).willReturn(pair);
+        given(tokenService.login(UserFixture.EMAIL)).willReturn(pair);
 
         // when & then
         assertThat(complete(profile)).contains(pair);
@@ -80,7 +80,7 @@ class OAuthAccountServiceTest {
         // given
         AuthInfo profile = authInfo("Owner@External.Test", true, false);
         given(users.saveAndFlush(any(User.class))).willAnswer(invocation -> invocation.getArgument(0));
-        given(sessions.createSession("owner@external.test")).willReturn(pair);
+        given(tokenService.login("owner@external.test")).willReturn(pair);
 
         // when
         assertThat(complete(profile)).contains(pair);
@@ -107,7 +107,7 @@ class OAuthAccountServiceTest {
         existing.updateProfile("기존닉네임", null);
         given(users.findByEmailForUpdate(email)).willReturn(Optional.of(existing));
         given(users.saveAndFlush(existing)).willReturn(existing);
-        given(sessions.createSession(email)).willReturn(pair);
+        given(tokenService.login(email)).willReturn(pair);
 
         // when & then
         assertThat(complete(authInfo(email, true, true))).contains(pair);
@@ -248,7 +248,7 @@ class OAuthAccountServiceTest {
         User existing = UserFixture.createWithId();
         existing.linkOAuthAccount(OAuthProvider.GOOGLE, subject);
         given(users.findByEmailForUpdate(UserFixture.EMAIL)).willReturn(Optional.of(existing));
-        given(sessions.createSession(UserFixture.EMAIL)).willReturn(pair);
+        given(tokenService.login(UserFixture.EMAIL)).willReturn(pair);
 
         // when & then
         assertThat(complete(authInfo(UserFixture.EMAIL, true, true))).contains(pair);

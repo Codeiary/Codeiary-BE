@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,7 @@ class GitHubBlogClientTest {
         when(tokens.token(10, 20)).thenReturn("installation-token");
     }
 
+    @DisplayName("설치 토큰으로 저장된 브랜치에 UTF-8 Markdown을 작성할 수 있다.")
     @Test
     void createsUtf8MarkdownOnStoredBranchUsingInstallationToken() {
         server.expect(requestTo(url + "?ref=master"))
@@ -53,6 +55,7 @@ class GitHubBlogClientTest {
         server.verify();
     }
 
+    @DisplayName("수정 충돌 시 SHA를 다시 조회하고 한 번 재시도할 수 있다.")
     @Test
     void updateConflictRefetchesShaBeforeOneRetry() {
         expectFile("old");
@@ -67,6 +70,7 @@ class GitHubBlogClientTest {
         server.verify();
     }
 
+    @DisplayName("이름 변경 시 새 파일을 쓰고 이전 경로를 삭제할 수 있다.")
     @Test
     void renameWritesNewFileAndRemovesOldAndLegacyPaths() {
         String oldPath = "Spring/이전 제목-42.md";
@@ -88,6 +92,7 @@ class GitHubBlogClientTest {
         server.verify();
     }
 
+    @DisplayName("비공개·삭제 글의 내용을 올리지 않고 GitHub 파일을 제거할 수 있다.")
     @Test
     void privateOrDeletedPostRemovesCurrentFileWithoutUploadingContent() {
         expectFile("old");
@@ -99,6 +104,7 @@ class GitHubBlogClientTest {
         server.verify();
     }
 
+    @DisplayName("Markdown 내용이 같으면 새 커밋 생성을 건너뛸 수 있다.")
     @Test
     void unchangedMarkdownDoesNotCreateCommit() {
         server.expect(requestTo(url + "?ref=master")).andRespond(withSuccess(
@@ -107,6 +113,7 @@ class GitHubBlogClientTest {
         server.verify();
     }
 
+    @DisplayName("없는 비공개 글의 GitHub 파일 생성을 건너뛸 수 있다.")
     @Test
     void missingPrivatePostDoesNotCreateFile() {
         server.expect(requestTo(url + "?ref=master")).andRespond(withStatus(HttpStatus.NOT_FOUND));
@@ -114,6 +121,7 @@ class GitHubBlogClientTest {
         server.verify();
     }
 
+    @DisplayName("GitHub 오류 응답이나 토큰의 외부 노출을 차단할 수 있다.")
     @Test
     void upstreamErrorDoesNotLeakResponseOrToken() {
         server.expect(anything()).andRespond(withStatus(HttpStatus.FORBIDDEN).body("private-upstream-data"));

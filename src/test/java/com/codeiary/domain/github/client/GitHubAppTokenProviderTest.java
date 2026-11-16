@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.security.KeyPairGenerator;
 import java.time.Instant;
 import java.util.Base64;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.HttpMethod;
@@ -20,6 +21,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class GitHubAppTokenProviderTest {
     @TempDir Path directory;
 
+    @DisplayName("짧은 수명의 App JWT로 한 저장소에 한정된 설치 토큰을 발급할 수 있다.")
     @Test
     void signsShortLivedAppJwtAndScopesInstallationTokenToOneRepository() throws Exception {
         var generator = KeyPairGenerator.getInstance("RSA");

@@ -1,6 +1,8 @@
 package com.codeiary.global.security.exception;
 
 import com.codeiary.global.exception.dto.response.ErrorResponse;
+import com.codeiary.global.exception.CommonErrorCode;
+import com.codeiary.global.exception.ErrorCode;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.github.exception.GitHubErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
@@ -61,8 +63,18 @@ public class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDen
         } else if (exception.getCause() instanceof AccessDeniedException) {
             write(response, SecurityErrorCode.DENIED_ACCESS);
         } else {
-            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            handleServerError(response, exception);
         }
+    }
+
+    public void handleServerError(HttpServletResponse response, Exception exception) throws IOException {
+        log.atError()
+                .addKeyValue("status", CommonErrorCode.INTERNAL_SERVER_ERROR.getHttpStatus().value())
+                .addKeyValue("error_type", exception.getClass().getSimpleName())
+                .addKeyValue("error_message", CommonErrorCode.INTERNAL_SERVER_ERROR.getMessage())
+                .setCause(exception)
+                .log("Request failed");
+        write(response, CommonErrorCode.INTERNAL_SERVER_ERROR);
     }
 
     public void handleOAuthFailure(HttpServletRequest request, HttpServletResponse response,
@@ -78,7 +90,7 @@ public class SecurityErrorHandler implements AuthenticationEntryPoint, AccessDen
         response.sendRedirect(redirectUrl);
     }
 
-    private void write(HttpServletResponse response, SecurityErrorCode error) throws IOException {
+    private void write(HttpServletResponse response, ErrorCode error) throws IOException {
         response.setStatus(error.getHttpStatus().value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding("UTF-8");

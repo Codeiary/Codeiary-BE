@@ -1,6 +1,6 @@
 package com.codeiary.domain.github.service;
 
-import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.global.security.dto.AuthInfo;
 import com.codeiary.domain.github.dto.GitHubLinkContext;
 import com.codeiary.domain.github.entity.GitHubConnection;
 import com.codeiary.domain.github.exception.GitHubErrorCode;
@@ -14,6 +14,7 @@ import java.time.Instant;
 import java.util.Optional;
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -35,6 +36,7 @@ class GitHubConnectionServiceTest {
     @Mock OAuth2AuthorizedClientService authorizedClients;
     @InjectMocks GitHubConnectionService service;
 
+    @DisplayName("GitHub 계정의 고유 제약 위반을 연결 충돌로 변환할 수 있다.")
     @ParameterizedTest
     @ValueSource(strings = {"github_connection_user_id_key", "github_connection_github_user_id_key"})
     void translateAccountUniqueViolations(String constraint) {
@@ -45,6 +47,7 @@ class GitHubConnectionServiceTest {
         });
     }
 
+    @DisplayName("다른 DB 무결성 오류를 그대로 전달할 수 있다.")
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = "github_connection_user_id_fkey")
