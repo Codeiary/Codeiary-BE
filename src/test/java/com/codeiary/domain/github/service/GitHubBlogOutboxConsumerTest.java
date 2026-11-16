@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -42,6 +43,7 @@ class GitHubBlogOutboxConsumerTest extends IntegrationTestSupport {
     @Autowired GitHubBlogSyncConfig settings;
     @MockitoBean GitHubBlogWriter writer;
 
+    @DisplayName("대기 중인 메시지를 회수하고 트랜잭션 밖에서 GitHub를 호출할 수 있다.")
     @Test
     void recoversPendingMessageAndCallsGithubOutsideTransaction() {
         var setup = setup();
@@ -69,6 +71,7 @@ class GitHubBlogOutboxConsumerTest extends IntegrationTestSupport {
         }
     }
 
+    @DisplayName("GitHub 실패 시 작업을 대기 상태로 돌리고 메시지를 확인 처리할 수 있다.")
     @Test
     void githubFailureReturnsWorkToPendingAndAcknowledgesMessage() {
         var setup = setup();
@@ -89,6 +92,7 @@ class GitHubBlogOutboxConsumerTest extends IntegrationTestSupport {
         }
     }
 
+    @DisplayName("GitHub 실패 횟수가 한도에 도달하면 소비를 중단할 수 있다.")
     @Test
     void stopsConsumingAfterMaximumGithubFailures() {
         var setup = setup();
