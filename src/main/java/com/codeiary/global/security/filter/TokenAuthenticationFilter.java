@@ -1,9 +1,10 @@
 package com.codeiary.global.security.filter;
 
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.cookie.TokenCookieManager;
+import com.codeiary.global.security.exception.SecurityErrorHandler;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,7 +24,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public final class TokenAuthenticationFilter extends OncePerRequestFilter {
 
     private final TokenCookieManager cookies;
-    private final TokenSessionService sessions;
+    private final TokenService tokenService;
+    private final SecurityErrorHandler errors;
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -43,13 +45,19 @@ public final class TokenAuthenticationFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain chain
     ) throws ServletException, IOException {
-        cookies.accessToken(request).ifPresent(rawToken -> authenticate(request, rawToken));
+        try {
+            cookies.accessToken(request).ifPresent(rawToken -> authenticate(request, rawToken));
+        } catch (RuntimeException exception) {
+            SecurityContextHolder.clearContext();
+            errors.handleServerError(response, exception);
+            return;
+        }
         chain.doFilter(request, response);
     }
 
     private void authenticate(HttpServletRequest request, String rawToken) {
         try {
-            User user = sessions.authenticate(rawToken);
+            User user = tokenService.authenticate(rawToken);
             var authorities = List.of(
                     new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
             );
@@ -61,6 +69,9 @@ public final class TokenAuthenticationFilter extends OncePerRequestFilter {
             SecurityContextHolder.setContext(context);
         } catch (RestApiException exception) {
             SecurityContextHolder.clearContext();
+            if (exception.getErrorCode().getHttpStatus().is5xxServerError()) {
+                throw exception;
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-package com.codeiary.domain.auth.dto;
+package com.codeiary.global.security.dto;
 
 import com.codeiary.domain.user.entity.enums.OAuthProvider;
 

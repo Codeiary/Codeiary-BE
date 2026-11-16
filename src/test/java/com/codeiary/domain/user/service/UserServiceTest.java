@@ -54,7 +54,7 @@ class UserServiceTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"blog", "Portfolio", "ADMIN"})
-    @DisplayName("서비스 경로와 충돌하는 닉네임은 사용할 수 없다")
+    @DisplayName("서비스 경로와 충돌하는 닉네임 사용을 거절할 수 있다.")
     void rejectReservedNickname(String nickname) {
         assertThat(service.checkNickname(UserFixture.ID, nickname).available()).isFalse();
         User user = UserFixture.createWithId(Role.PENDING);

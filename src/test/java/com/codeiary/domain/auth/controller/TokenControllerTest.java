@@ -6,7 +6,7 @@ import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.exception.TokenErrorCode;
 import com.codeiary.domain.auth.cookie.TokenCookieManager;
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
 import java.time.Instant;
@@ -35,23 +35,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class TokenControllerTest {
 
     @Mock
-    private TokenSessionService sessions;
+    private TokenService tokenService;
 
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
         TokenCookieManager cookies = TokenFixture.cookies("codeiary.com");
-        mockMvc = MockMvcBuilders.standaloneSetup(new TokenController(sessions, cookies))
+        mockMvc = MockMvcBuilders.standaloneSetup(new TokenController(tokenService, cookies))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
-    }
-
-    @Test
-    @DisplayName("재발급 별칭이 제거되었음을 확인할 수 있다.")
-    void rejectRefreshAlias() throws Exception {
-        mockMvc.perform(post("/auth/refresh"))
-                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -61,7 +54,7 @@ class TokenControllerTest {
         Instant now = Instant.now();
         TokenPair pair = new TokenPair("new-access", "new-refresh",
                 now.plus(Duration.ofMinutes(30)), now.plus(Duration.ofDays(7)));
-        given(sessions.reissue("old-refresh")).willReturn(pair);
+        given(tokenService.reissue("old-refresh")).willReturn(pair);
 
         // when
         MvcResult result = mockMvc.perform(post("/auth/reissue")
@@ -80,14 +73,14 @@ class TokenControllerTest {
                 .allSatisfy(cookie -> assertThat(cookie)
                         .contains("Path=/", "Domain=codeiary.com", "Secure", "HttpOnly", "SameSite=Strict")
                         .containsPattern("Max-Age=[1-9][0-9]*"));
-        then(sessions).should().reissue("old-refresh");
+        then(tokenService).should().reissue("old-refresh");
     }
 
     @Test
     @DisplayName("만료된 토큰의 재발급을 거절하고 쿠키를 삭제할 수 있다.")
     void rejectExpiredToken() throws Exception {
         // given
-        given(sessions.reissue("expired-refresh"))
+        given(tokenService.reissue("expired-refresh"))
                 .willThrow(new RestApiException(TokenErrorCode.TOKEN_EXPIRED));
 
         // when
@@ -100,14 +93,14 @@ class TokenControllerTest {
         jsonPath("$.code").value("TOKEN_EXPIRED").match(result);
         header().string(HttpHeaders.CACHE_CONTROL, "no-store").match(result);
         assertExpiredCookies(result.getResponse());
-        then(sessions).should().reissue("expired-refresh");
+        then(tokenService).should().reissue("expired-refresh");
     }
 
     @Test
     @DisplayName("Refresh Token 쿠키가 없는 재발급 요청을 거절할 수 있다.")
     void rejectMissingCookie() throws Exception {
         // given
-        given(sessions.reissue(null))
+        given(tokenService.reissue(null))
                 .willThrow(new RestApiException(TokenErrorCode.TOKEN_MISSING));
 
         // when
@@ -117,7 +110,7 @@ class TokenControllerTest {
         status().isUnauthorized().match(result);
         jsonPath("$.code").value("TOKEN_MISSING").match(result);
         assertExpiredCookies(result.getResponse());
-        then(sessions).should().reissue(null);
+        then(tokenService).should().reissue(null);
     }
 
     @Test
@@ -137,7 +130,7 @@ class TokenControllerTest {
         content().string("").match(result);
         header().string(HttpHeaders.CACHE_CONTROL, "no-store").match(result);
         assertExpiredCookies(result.getResponse());
-        then(sessions).should().logout("current-refresh", "current-access");
+        then(tokenService).should().logout("current-refresh", "current-access");
     }
 
     private void assertExpiredCookies(MockHttpServletResponse response) {

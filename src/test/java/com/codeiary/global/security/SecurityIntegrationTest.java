@@ -6,7 +6,7 @@ import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.domain.auth.dto.TokenPair;
 import com.codeiary.domain.auth.provider.JwtTokenProvider;
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.support.IntegrationTestSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
@@ -17,6 +17,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
@@ -40,7 +41,8 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
 
     @Autowired private UserRepository users;
     @Autowired private JwtTokenProvider tokens;
-    @Autowired private TokenSessionService sessions;
+    @Autowired private TokenService tokenService;
+    @Autowired private RedisTemplate<String, String> redis;
     @Autowired private EntityManager entityManager;
 
     @Test
@@ -183,7 +185,7 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
     void allowPendingTokenLifecycle() throws Exception {
         // given
         User user = users.saveAndFlush(UserFixture.create(Role.PENDING));
-        TokenPair pair = sessions.createSession(user.getEmail());
+        TokenPair pair = tokenService.login(user.getEmail());
 
         // when
         MvcResult reissued = mockMvc.perform(post("/auth/reissue")
@@ -205,9 +207,44 @@ class SecurityIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    @Transactional
+    @DisplayName("교체된 Refresh Token을 다시 사용하면 새 Access Token도 차단할 수 있다.")
+    void revokeSessionOnRefreshTokenReuse() throws Exception {
+        User user = users.saveAndFlush(UserFixture.create(Role.USER));
+        TokenPair pair = tokenService.login(user.getEmail());
+
+        MvcResult reissued = mockMvc.perform(post("/auth/reissue")
+                        .cookie(new Cookie("refresh_token", pair.refreshToken())))
+                .andExpect(status().isNoContent())
+                .andReturn();
+        Cookie newAccess = reissued.getResponse().getCookie("access_token");
+        assertThat(newAccess).isNotNull();
+
+        mockMvc.perform(post("/auth/reissue")
+                        .cookie(new Cookie("refresh_token", pair.refreshToken())))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("TOKEN_REVOKED"));
+        mockMvc.perform(get("/users/me").cookie(newAccess))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @Transactional
+    @DisplayName("리프레시 토큰 키가 사라져도 블랙리스트에 없는 Access Token은 사용할 수 있다.")
+    void allowAccessTokenAfterRefreshKeyLoss() throws Exception {
+        User user = users.saveAndFlush(UserFixture.create(Role.USER));
+        TokenPair pair = tokenService.login(user.getEmail());
+        UUID loginId = UUID.fromString(tokens.validateAccessToken(pair.accessToken()).get("sid", String.class));
+
+        redis.delete("auth:refresh:{" + loginId + "}");
+
+        mockMvc.perform(get("/users/me").cookie(new Cookie("access_token", pair.accessToken())))
+                .andExpect(status().isOk());
+    }
+
     private Cookie accessCookie(User user) {
-        return new Cookie("access_token", tokens.generateTokenPair(
-                user.getId(), user.getRole().name(), UUID.randomUUID()).accessToken());
+        return new Cookie("access_token", tokenService.login(user.getEmail()).accessToken());
     }
 
 }

@@ -1,6 +1,6 @@
 package com.codeiary.domain.portfolio.controller;
 
-import com.codeiary.domain.auth.provider.JwtTokenProvider;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.portfolio.entity.Font;
 import com.codeiary.domain.portfolio.entity.Portfolio;
 import com.codeiary.domain.portfolio.entity.PortfolioBlock;
@@ -17,7 +17,6 @@ import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.support.IntegrationTestSupport;
 import jakarta.persistence.EntityManager;
 import jakarta.servlet.http.Cookie;
-import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -49,11 +48,11 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     @Autowired private UserRepository users;
     @Autowired private FontRepository fonts;
     @Autowired private PortfolioRepository portfolios;
-    @Autowired private JwtTokenProvider tokens;
+    @Autowired private TokenService tokenService;
     @Autowired private EntityManager entityManager;
 
     @Test
-    @DisplayName("수정은 ID·작성자를 유지하고 이전 블록·서식을 교체하며 삭제 시 자식만 함께 제거한다")
+    @DisplayName("수정 시 ID·작성자를 유지하며 블록·서식을 교체하고 삭제 시 자식도 제거할 수 있다.")
     void updateAndDeletePortfolio() throws Exception {
         User owner = users.saveAndFlush(UserFixture.create(Role.USER));
         Font font = fonts.findAll().getFirst();
@@ -108,7 +107,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("미인증·타인·잘못된 수정 요청을 거절하고 기존 문서를 유지한다")
+    @DisplayName("미인증·타인·잘못된 수정 요청을 거절하고 기존 문서를 유지할 수 있다.")
     void rejectUnauthorizedAndInvalidMutations() throws Exception {
         User owner = users.saveAndFlush(UserFixture.create(Role.USER));
         User other = users.saveAndFlush(User.create("other@example.com", "다른사용자", Role.USER));
@@ -134,7 +133,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("상세 조회는 서식과 블록을 복원하고 비공개 문서는 작성자에게만 공개한다")
+    @DisplayName("상세 조회 시 서식과 블록을 복원하고 비공개 문서는 작성자에게만 공개할 수 있다.")
     void readDetailAndProtectPrivatePortfolio() throws Exception {
         User owner = users.saveAndFlush(UserFixture.create(Role.USER));
         User other = users.saveAndFlush(User.create("other@example.com", "다른사용자", Role.USER));
@@ -162,7 +161,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("공개 목록과 내 목록을 분리하고 제목 검색 및 최신순 페이지네이션을 제공한다")
+    @DisplayName("공개 목록과 내 목록을 분리하고 제목 검색과 최신순 페이지네이션을 제공할 수 있다.")
     void listPublicAndMine() throws Exception {
         User owner = users.saveAndFlush(UserFixture.create(Role.USER));
         User other = users.saveAndFlush(User.create("other@example.com", "다른사용자", Role.USER));
@@ -193,7 +192,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("로그인한 사용자의 포트폴리오와 블록·좌표·정렬·서식을 함께 저장한다.")
+    @DisplayName("로그인한 사용자의 포트폴리오와 블록·좌표·정렬·서식을 함께 저장할 수 있다.")
     void createPortfolio() throws Exception {
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         Font defaultFont = fonts.saveAndFlush(Font.create("test-sans", "고딕", "sans-serif", null));
@@ -265,7 +264,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("비로그인 사용자와 온보딩을 완료하지 않은 사용자의 생성을 차단한다.")
+    @DisplayName("비로그인 사용자와 온보딩을 완료하지 않은 사용자의 생성을 차단할 수 있다.")
     void rejectUnauthorizedCreate() throws Exception {
         mockMvc.perform(post("/portfolios").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isUnauthorized());
@@ -278,7 +277,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
 
     @ParameterizedTest
     @MethodSource("invalidBlocks")
-    @DisplayName("잘못된 제목·서식·글꼴·좌표 요청을 400으로 거절하고 저장하지 않는다.")
+    @DisplayName("잘못된 제목·서식·글꼴·좌표 요청을 400으로 거절하고 저장을 막을 수 있다.")
     void rejectInvalidPortfolio(String blocks) throws Exception {
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         Font font = fonts.saveAndFlush(Font.create("test-sans", "고딕", "sans-serif", null));
@@ -319,7 +318,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
 
     @ParameterizedTest
     @ValueSource(strings = {"x", "y", "widthPx", "heightPx"})
-    @DisplayName("좌표·너비·높이 중 하나라도 누락하면 저장하지 않는다.")
+    @DisplayName("좌표·너비·높이 중 하나라도 누락하면 저장을 거절할 수 있다.")
     void rejectMissingLayout(String field) throws Exception {
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         Font font = fonts.saveAndFlush(Font.create("test-sans", "고딕", "sans-serif", null));
@@ -341,7 +340,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {" "})
-    @DisplayName("포트폴리오 제목이 없거나 공백이면 저장하지 않는다.")
+    @DisplayName("포트폴리오 제목이 없거나 공백이면 저장을 거절할 수 있다.")
     void rejectBlankTitle(String title) throws Exception {
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         Font font = fonts.saveAndFlush(Font.create("test-sans", "고딕", "sans-serif", null));
@@ -359,7 +358,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
             "[{\"startOffset\":0,\"endOffset\":3}]",
             "[{\"startOffset\":0,\"endOffset\":1,\"fontId\":9223372036854775807}]"
     })
-    @DisplayName("제목 서식의 범위와 글꼴이 잘못되면 저장하지 않는다.")
+    @DisplayName("제목 서식의 범위와 글꼴이 잘못되면 저장을 거절할 수 있다.")
     void rejectInvalidTitleStyle(String styles) throws Exception {
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         Font font = fonts.saveAndFlush(Font.create("test-sans", "고딕", "sans-serif", null));
@@ -373,7 +372,7 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     }
 
     @Test
-    @DisplayName("텍스트 본문을 생략하면 빈 텍스트 블록으로 저장한다.")
+    @DisplayName("텍스트 본문을 생략하면 빈 텍스트 블록으로 저장할 수 있다.")
     void createEmptyTextBlock() throws Exception {
         User author = users.saveAndFlush(UserFixture.create(Role.USER));
         Font font = fonts.saveAndFlush(Font.create("test-sans", "고딕", "sans-serif", null));
@@ -398,7 +397,6 @@ class PortfolioControllerTest extends IntegrationTestSupport {
     }
 
     private Cookie accessCookie(User user) {
-        return new Cookie("access_token", tokens.generateTokenPair(
-                user.getId(), user.getRole().name(), UUID.randomUUID()).accessToken());
+        return new Cookie("access_token", tokenService.login(user.getEmail()).accessToken());
     }
 }
