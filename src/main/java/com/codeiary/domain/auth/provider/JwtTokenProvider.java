@@ -48,12 +48,12 @@ public final class JwtTokenProvider {
                 .build();
     }
 
-    public TokenPair generateTokenPair(Long userId, String role, UUID sessionId) {
-        return generateTokenPair(userId, role, sessionId,
+    public TokenPair generateTokenPair(Long userId, String role, UUID loginId) {
+        return generateTokenPair(userId, role, loginId,
                 Instant.now().plus(refreshTokenTtl).truncatedTo(ChronoUnit.SECONDS));
     }
 
-    public TokenPair generateTokenPair(Long userId, String role, UUID sessionId, Instant refreshExpiresAt) {
+    public TokenPair generateTokenPair(Long userId, String role, UUID loginId, Instant refreshExpiresAt) {
         Instant now = Instant.now();
         if (!refreshExpiresAt.isAfter(now)) {
             throw new RestApiException(TokenErrorCode.TOKEN_EXPIRED);
@@ -63,8 +63,8 @@ public final class JwtTokenProvider {
             accessExpiresAt = refreshExpiresAt;
         }
         return new TokenPair(
-                generate(userId, role, sessionId, "access", accessExpiresAt),
-                generate(userId, role, sessionId, "refresh", refreshExpiresAt),
+                generate(userId, role, loginId, "access", accessExpiresAt),
+                generate(userId, role, loginId, "refresh", refreshExpiresAt),
                 accessExpiresAt, refreshExpiresAt);
     }
 
@@ -76,7 +76,7 @@ public final class JwtTokenProvider {
         return validate(token, "refresh");
     }
 
-    private String generate(Long userId, String role, UUID sessionId,
+    private String generate(Long userId, String role, UUID loginId,
                             String tokenUse, Instant expiresAt) {
         Instant issuedAt = Instant.now();
         return Jwts.builder()
@@ -88,7 +88,7 @@ public final class JwtTokenProvider {
                 .notBefore(Date.from(issuedAt))
                 .expiration(Date.from(expiresAt))
                 .id(UUID.randomUUID().toString())
-                .claim("sid", sessionId.toString())
+                .claim("sid", loginId.toString())
                 .claim("role", role)
                 .claim("token_use", tokenUse)
                 .signWith(signingKey, Jwts.SIG.HS256)
@@ -105,13 +105,13 @@ public final class JwtTokenProvider {
                 throw new RestApiException(TokenErrorCode.TOKEN_TYPE_MISMATCH);
             }
             String subject = claims.getSubject();
-            String sessionId = claims.get("sid", String.class);
-            if (subject == null || sessionId == null || claims.getExpiration() == null
+            String loginId = claims.get("sid", String.class);
+            if (subject == null || loginId == null || claims.getExpiration() == null
                     || claims.getId() == null || claims.getId().isBlank()) {
                 throw new RestApiException(TokenErrorCode.TOKEN_INVALID);
             }
             Long.parseLong(subject);
-            UUID.fromString(sessionId);
+            UUID.fromString(loginId);
             return claims;
         } catch (ExpiredJwtException exception) {
             throw new RestApiException(TokenErrorCode.TOKEN_EXPIRED, exception);
