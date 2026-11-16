@@ -9,10 +9,9 @@ import com.codeiary.domain.user.entity.User;
 import com.codeiary.domain.user.entity.enums.Role;
 import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.domain.user.repository.UserRepository;
-import com.codeiary.domain.auth.provider.JwtTokenProvider;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.support.IntegrationTestSupport;
 import jakarta.servlet.http.Cookie;
-import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -43,7 +42,7 @@ class BlogPostControllerTest extends IntegrationTestSupport {
     @Autowired private BlogPostRepository posts;
     @Autowired private PostLikeRepository postLikes;
     @Autowired private CategoryRepository categories;
-    @Autowired private JwtTokenProvider tokens;
+    @Autowired private TokenService tokenService;
 
     @Test
     @DisplayName("로그인한 작성자가 게시글을 생성하고 수정·삭제할 수 있다.")
@@ -238,7 +237,6 @@ class BlogPostControllerTest extends IntegrationTestSupport {
     }
 
     private Cookie accessCookie(User user) {
-        return new Cookie("access_token", tokens.generateTokenPair(
-                user.getId(), user.getRole().name(), UUID.randomUUID()).accessToken());
+        return new Cookie("access_token", tokenService.login(user.getEmail()).accessToken());
     }
 }

@@ -49,7 +49,7 @@ class ImageControllerTest {
     }
 
     @Test
-    @DisplayName("인증된 사용자에게 업로드 URL을 발급하고 캐시를 막을 수 있다.")
+    @DisplayName("인증된 사용자에게 업로드 URL을 발급하고 응답 캐시를 차단할 수 있다.")
     void presign() throws Exception {
         // given
         var request = new ImagePresignRequest("image/png", 128L);

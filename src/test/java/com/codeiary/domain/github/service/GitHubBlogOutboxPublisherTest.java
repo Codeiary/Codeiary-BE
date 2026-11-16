@@ -4,6 +4,7 @@ import com.codeiary.domain.github.config.GitHubBlogSyncConfig;
 import com.codeiary.domain.github.scheduler.GitHubBlogOutboxPublisher;
 import com.codeiary.support.IntegrationTestSupport;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -20,6 +21,7 @@ class GitHubBlogOutboxPublisherTest extends IntegrationTestSupport {
     @Autowired JdbcTemplate jdbc;
     @Autowired GitHubBlogSyncConfig settings;
 
+    @DisplayName("처리 시각이 된 작업만 발행하고 발행 상태를 기록할 수 있다.")
     @Test
     void publishesOnlyDueBatchAndMarksPublishedRows() {
         long authorId = System.nanoTime();
@@ -45,6 +47,7 @@ class GitHubBlogOutboxPublisherTest extends IntegrationTestSupport {
         }
     }
 
+    @DisplayName("Redis 발행 실패 시 작업을 남겨 트랜잭션 밖에서 재시도할 수 있다.")
     @Test
     void redisFailureKeepsWorkPendingForRetryOutsideTransaction() {
         long authorId = System.nanoTime();
@@ -76,6 +79,7 @@ class GitHubBlogOutboxPublisherTest extends IntegrationTestSupport {
         }
     }
 
+    @DisplayName("발행 실패 횟수가 한도에 도달하면 발행을 중단할 수 있다.")
     @Test
     void stopsPublishingAfterMaximumFailures() {
         long authorId = System.nanoTime();
@@ -101,6 +105,7 @@ class GitHubBlogOutboxPublisherTest extends IntegrationTestSupport {
         }
     }
 
+    @DisplayName("만료된 전달 작업이 실패 한도에 도달하면 실패 상태로 바꿀 수 있다.")
     @Test
     void expiredDeliveryReachesFailedAtMaximumFailures() {
         long authorId = System.nanoTime();
@@ -123,6 +128,7 @@ class GitHubBlogOutboxPublisherTest extends IntegrationTestSupport {
         }
     }
 
+    @DisplayName("만료된 발행·처리 작업을 다시 발행할 수 있다.")
     @Test
     void republishesExpiredEnqueuedAndProcessingWork() {
         long authorId = System.nanoTime();

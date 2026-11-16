@@ -1,7 +1,7 @@
 package com.codeiary.global.security.service;
 
 import com.codeiary.global.logging.LogExecution;
-import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.global.security.dto.AuthInfo;
 import com.codeiary.global.security.dto.OAuth2Response;
 import com.codeiary.global.security.dto.adapter.OAuth2ResponseFactory;
 import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;

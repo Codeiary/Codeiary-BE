@@ -36,7 +36,7 @@ flowchart LR
 2. Google 콜백에서 Spring이 `state`와 OIDC ID Token을 검증한다.
 3. `CustomOidcUserService`가 Google 정보를 `AuthInfo`로 변환한다.
 4. `OAuthAccountService`가 Google `sub`로 기존 사용자를 찾거나 새 사용자를 만든다. 신규 사용자는 `PENDING` 권한을 받는다.
-5. `TokenSessionService`가 Codeiary JWT를 발급한다. 성공 핸들러는 이를 `HttpOnly` 쿠키로 쓰고 프론트의 `/auth/callback`으로 돌려보낸다.
+5. `TokenService`가 Codeiary JWT를 발급한다. 성공 핸들러는 이를 `HttpOnly` 쿠키로 쓰고 프론트의 `/auth/callback`으로 돌려보낸다.
 
 Google의 검증된 이메일만 가입·연결에 사용한다. 기존 계정에 이메일로 연결할 때는 검증된 Gmail 주소 또는 Google Workspace의 `hd` 정보를 요구한다. 자세한 토큰 수명과 재발급 규칙은 [인증 문서](../guides/authentication.md)에 있다.
 

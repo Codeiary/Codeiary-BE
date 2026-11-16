@@ -16,6 +16,7 @@ import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.support.IntegrationTestSupport;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
@@ -36,6 +37,7 @@ class GitHubBlogOutboxIntegrationTest extends IntegrationTestSupport {
     @Autowired PlatformTransactionManager transactions;
     @MockitoBean GitHubBlogWriter writer;
 
+    @DisplayName("GitHub 호출 없이 글 생성·수정·삭제 작업을 아웃박스에 기록할 수 있다.")
     @Test
     void createUpdateAndDeletePersistPendingWorkWithoutCallingGithub() {
         var user = users.saveAndFlush(UserFixture.create(UUID.randomUUID() + "@example.com"));
@@ -80,6 +82,7 @@ class GitHubBlogOutboxIntegrationTest extends IntegrationTestSupport {
         verifyNoInteractions(writer);
     }
 
+    @DisplayName("글 변경을 롤백하면 아웃박스 작업도 함께 롤백할 수 있다.")
     @Test
     void rollingBackPostChangeAlsoRollsBackOutboxWork() {
         var user = users.saveAndFlush(UserFixture.create(UUID.randomUUID() + "@example.com"));

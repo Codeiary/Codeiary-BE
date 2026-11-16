@@ -3,7 +3,7 @@ package com.codeiary.global.security;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.mock.web.MockHttpServletResponse;
 import com.codeiary.domain.user.entity.enums.OAuthProvider;
-import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.global.security.dto.AuthInfo;
 import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
 import com.codeiary.global.security.repository.OAuth2RequestRepository;
@@ -11,7 +11,7 @@ import com.codeiary.domain.github.dto.GitHubLinkContext;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.mock.web.MockHttpServletRequest;
 import com.codeiary.global.security.handler.CustomOauth2SuccessHandler;
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.github.client.GitHubRepositoryClient;
 import com.codeiary.domain.github.client.GitHubRepositoryClient.*;
 import com.codeiary.domain.github.repository.GitHubConnectionRepository;
@@ -23,6 +23,7 @@ import jakarta.servlet.http.Cookie;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -47,11 +48,12 @@ class GitHubRepositoryIntegrationTest extends IntegrationTestSupport {
     @Autowired CustomOauth2SuccessHandler successHandler;
     @Autowired UserRepository users;
     @Autowired GitHubConnectionRepository connections;
-    @Autowired TokenSessionService sessions;
+    @Autowired TokenService tokenService;
     @Autowired OAuth2AuthorizedClientService authorizedClients;
     @Autowired ClientRegistrationRepository registrations;
     @MockitoBean GitHubRepositoryClient client;
 
+    @DisplayName("OAuth 콜백에서 추가 요청 없이 저장소를 생성하고 연결할 수 있다.")
     @Test
     void oauthCallbackCreatesAndConnectsRepositoryWithoutAnotherRequest() throws Exception {
         var user = users.saveAndFlush(UserFixture.create(Role.USER));
@@ -59,7 +61,7 @@ class GitHubRepositoryIntegrationTest extends IntegrationTestSupport {
                 "123", new OAuth2AccessToken(OAuth2AccessToken.TokenType.BEARER, "test-token", Instant.now(),
                 Instant.now().plusSeconds(3600))),
                 UsernamePasswordAuthenticationToken.authenticated("123", "", List.of()));
-        var cookie = new Cookie("access_token", sessions.createSession(user.getEmail()).accessToken());
+        var cookie = new Cookie("access_token", tokenService.login(user.getEmail()).accessToken());
         var owner = new Account(123, "octocat");
         given(client.ensureBlogRepository("test-token", "octocat")).willReturn(
                 new Repository(20, "CodeiaryBlog", owner, "main", false, false, Map.of("push", true)));

@@ -85,11 +85,11 @@ class JwtTokenProviderTest {
     @DisplayName("Access Token 30분과 Refresh Token 7일의 만료 시간을 설정할 수 있다.")
     void issueTokenPairWithConfiguredExpiry() {
         // given
-        UUID sessionId = UUID.randomUUID();
+        UUID loginId = UUID.randomUUID();
         Instant before = Instant.now().truncatedTo(ChronoUnit.SECONDS);
 
         // when
-        TokenPair pair = tokenProvider.generateTokenPair(1L, "USER", sessionId);
+        TokenPair pair = tokenProvider.generateTokenPair(1L, "USER", loginId);
         Instant after = Instant.now().truncatedTo(ChronoUnit.SECONDS);
         Claims access = tokenProvider.validateAccessToken(pair.accessToken());
         Claims refresh = tokenProvider.validateRefreshToken(pair.refreshToken());
@@ -98,7 +98,7 @@ class JwtTokenProviderTest {
         for (Claims claims : new Claims[]{access, refresh}) {
             assertThat(claims.getSubject()).isEqualTo("1");
             assertThat(claims.get("role", String.class)).isEqualTo("USER");
-            assertThat(claims.get("sid", String.class)).isEqualTo(sessionId.toString());
+            assertThat(claims.get("sid", String.class)).isEqualTo(loginId.toString());
         }
         assertThat(access.get("token_use", String.class)).isEqualTo("access");
         assertThat(refresh.get("token_use", String.class)).isEqualTo("refresh");

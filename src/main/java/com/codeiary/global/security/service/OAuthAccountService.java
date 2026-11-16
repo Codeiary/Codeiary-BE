@@ -5,9 +5,9 @@ import com.codeiary.domain.user.exception.UserErrorCode;
 import com.codeiary.domain.user.repository.UserRepository;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.logging.LogExecution;
-import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.global.security.dto.AuthInfo;
 import com.codeiary.domain.auth.dto.TokenPair;
-import com.codeiary.domain.auth.service.TokenSessionService;
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.github.dto.GitHubLinkContext;
 import com.codeiary.domain.github.service.GitHubConnectionService;
 import com.codeiary.domain.github.service.GitHubRepositoryService;
@@ -31,7 +31,7 @@ import org.springframework.util.StringUtils;
 public class OAuthAccountService {
 
     private final UserRepository users;
-    private final TokenSessionService sessions;
+    private final TokenService tokenService;
     private final GitHubConnectionService githubConnections;
     private final GitHubRepositoryService githubRepositories;
     private final PlatformTransactionManager transactions;
@@ -44,7 +44,7 @@ public class OAuthAccountService {
         var profile = user.getAuthInfo();
         if (profile.provider() == OAuthProvider.GOOGLE) {
             return new TransactionTemplate(transactions).execute(status ->
-                    Optional.of(sessions.createSession(getOrCreate(profile).getEmail())));
+                    Optional.of(tokenService.login(getOrCreate(profile).getEmail())));
         }
         if (profile.provider() == OAuthProvider.GITHUB) {
             GitHubLinkContext context = authorization == null ? null

@@ -1,6 +1,6 @@
 package com.codeiary.domain.github.service;
 
-import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.global.security.dto.AuthInfo;
 import com.codeiary.domain.github.dto.GitHubLinkContext;
 import com.codeiary.domain.github.repository.GitHubConnectionRepository;
 import com.codeiary.domain.user.entity.User;
@@ -14,6 +14,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -28,6 +29,7 @@ class GitHubConnectionConcurrencyTest extends IntegrationTestSupport {
     @Autowired GitHubConnectionService service;
     @Autowired PlatformTransactionManager transactionManager;
 
+    @DisplayName("미완료 연결을 기다린 뒤 GitHub 연결을 해제할 수 있다.")
     @Test
     void disconnectWaitsForPendingConnectionAndRemovesIt() throws Exception {
         var transaction = new TransactionTemplate(transactionManager);

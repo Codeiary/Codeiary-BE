@@ -2,6 +2,7 @@ package com.codeiary.domain.github.client;
 
 import com.codeiary.domain.github.exception.GitHubErrorCode;
 import com.codeiary.global.exception.RestApiException;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpMethod;
@@ -18,6 +19,7 @@ class GitHubRepositoryClientTest {
     private final MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
     private final GitHubRepositoryClient client = new GitHubRepositoryClient(builder.build());
 
+    @DisplayName("GitHub 필드를 매핑하고 고정된 API 주소로만 인증할 수 있다.")
     @Test
     void mapsGithubFieldsAndAuthenticatesOnlyAgainstFixedGithubEndpoint() {
         server.expect(requestTo("https://api.github.com/user/installations/10/repositories?per_page=100&page=2"))
@@ -33,6 +35,7 @@ class GitHubRepositoryClientTest {
         server.verify();
     }
 
+    @DisplayName("없는 저장소를 README가 있는 비공개 저장소로 한 번만 생성할 수 있다.")
     @Test
     void missingRepositoryIsCreatedOnceAsPrivateWithReadme() {
         server.expect(requestTo("https://api.github.com/repos/octocat/CodeiaryBlog"))
@@ -45,6 +48,7 @@ class GitHubRepositoryClientTest {
         server.verify();
     }
 
+    @DisplayName("기존 저장소의 공개 범위를 바꾸지 않고 재사용할 수 있다.")
     @Test
     void existingRepositoryIsReusedWithoutPostingOrChangingVisibility() {
         server.expect(requestTo("https://api.github.com/repos/octocat/CodeiaryBlog"))
@@ -53,6 +57,7 @@ class GitHubRepositoryClientTest {
         server.verify();
     }
 
+    @DisplayName("동시 생성 충돌 시 저장소를 다시 조회할 수 있다.")
     @Test
     void concurrentCreationConflictRefetchesInsteadOfCreatingAnotherRepository() {
         server.expect(requestTo("https://api.github.com/repos/octocat/CodeiaryBlog"))
@@ -65,6 +70,7 @@ class GitHubRepositoryClientTest {
         server.verify();
     }
 
+    @DisplayName("보이지 않는 기존 저장소의 덮어쓰기를 막을 수 있다.")
     @Test
     void invisibleExistingRepositoryIsNotOverwrittenWhenCreationFails() {
         server.expect(anything()).andRespond(withStatus(HttpStatus.NOT_FOUND));
@@ -85,6 +91,7 @@ class GitHubRepositoryClientTest {
                 """;
     }
 
+    @DisplayName("저장소 생성 권한 오류를 OAuth 오류와 구분할 수 있다.")
     @Test
     void creationPermissionFailureExplainsAppInstallationInsteadOfMisreportingOauthFailure() {
         server.expect(anything()).andRespond(withStatus(HttpStatus.NOT_FOUND));
@@ -95,6 +102,7 @@ class GitHubRepositoryClientTest {
         server.verify();
     }
 
+    @DisplayName("만료된 GitHub 토큰을 로그인 실패와 구분하고 응답 본문을 숨길 수 있다.")
     @Test
     void expiredGithubTokenDoesNotBecomeLocalLoginFailureOrLeakUpstreamBody() {
         server.expect(anything()).andRespond(withStatus(HttpStatus.UNAUTHORIZED)

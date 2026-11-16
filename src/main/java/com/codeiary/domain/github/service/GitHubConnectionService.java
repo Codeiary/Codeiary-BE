@@ -1,7 +1,7 @@
 package com.codeiary.domain.github.service;
 
 import com.codeiary.global.logging.LogExecution;
-import com.codeiary.domain.auth.dto.AuthInfo;
+import com.codeiary.global.security.dto.AuthInfo;
 import com.codeiary.domain.github.dto.GitHubLinkContext;
 import com.codeiary.domain.github.dto.response.GitHubConnectionResponse;
 import com.codeiary.domain.github.dto.response.GitHubRepositoryResponse;

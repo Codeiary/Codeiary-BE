@@ -94,6 +94,7 @@ class BlogPostServiceTest {
         then(outbox).should().savePendingChange(any(BlogPost.class), eq(EventType.CREATED), isNull());
     }
 
+    @DisplayName("글 수정과 삭제 작업을 아웃박스에 기록할 수 있다.")
     @Test
     void updateAndDeleteRecordOutboxWork() {
         var user = UserFixture.createWithId();
@@ -141,7 +142,7 @@ class BlogPostServiceTest {
     }
 
     @Test
-    @DisplayName("잘못된 대표 이미지 주소로 게시글을 변경하지 않을 수 있다.")
+    @DisplayName("잘못된 대표 이미지 주소로 게시글 변경을 거절할 수 있다.")
     void rejectInvalidImage() {
         // given
         User user = UserFixture.createWithId();

@@ -35,18 +35,19 @@ Google 설정에는 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`이 필요하며,
 Access Token은 30분, Refresh Token은 최초 로그인부터 7일 동안 유효합니다.
 `token.jwt.access-token-ttl`, `token.jwt.refresh-token-ttl`로 변경할 수 있습니다.
 재발급해도 최초 7일 만료 시점은 연장되지 않고, Access Token도 이 시점을 넘지 않습니다.
-Refresh Token은 원문 대신 SHA-256 해시를 DB에 저장하고, 재발급 시 기존 토큰을 폐기합니다.
+Refresh Token은 원문 대신 SHA-256 해시를 Redis에 저장합니다. 리프레시 토큰 키는 최초 7일 만료 시각에 자동으로 삭제됩니다.
+재발급 시 현재 해시만 원자적으로 교체하고 이전 해시의 사용 이력을 만료 시각까지 유지합니다.
 폐기된 Refresh Token을 다시 사용하면 해당 로그인 전체를 차단합니다.
 클라이언트는 동시에 여러 재발급 요청을 보내지 않아야 합니다.
 
-로그아웃은 로그인 식별자(`sid`)를 PostgreSQL `token_blacklist`에 등록하여
-해당 로그인에서 발급한 Access Token·Refresh Token을 모두 차단합니다.
+로그아웃은 한 번의 로그인을 식별하는 UUID(`loginId`, JWT의 `sid` 클레임)의 블랙리스트 키를 Redis에 기록하고 리프레시 토큰 키를 삭제합니다.
+두 변경은 원자적으로 처리하며, 해당 로그인에서 발급한 Access Token·Refresh Token을 모두 차단합니다.
 다른 기기의 별도 로그인은 유지됩니다. 유효한 Refresh Token이 없으면 Access Token으로
 로그아웃할 수 있고, 유효한 토큰이 없어도 쿠키 삭제와 204 응답을 반환합니다.
 계정이 삭제되거나 비활성화되면 인증과 재발급을 차단하며,
 요청마다 DB의 현재 권한을 사용하므로 권한 변경도 다음 요청부터 반영됩니다.
-`TokenCleanupScheduler`가 매일 새벽 3시(Asia/Seoul)에 만료된 토큰과 블랙리스트 기록을 삭제합니다.
-실행 시간과 활성화 여부는 `auth.token-cleanup.cron`, `auth.token-cleanup.enabled`로 설정합니다.
+블랙리스트 키도 마지막 토큰 만료 시각에 맞춰 Redis TTL로 삭제됩니다.
+일반 요청에서는 JWT를 검증하고 블랙리스트 키가 없는지 확인합니다. 리프레시 토큰 해시는 재발급할 때만 조회합니다.
 
 `/admin/**`에는 ADMIN 권한이 필요합니다. `PENDING` 계정은 본인 조회,
 닉네임 중복 확인, 온보딩 완료, 토큰 재발급·로그아웃 API와 공개 조회를 사용할 수 있습니다.
@@ -58,12 +59,11 @@ GET `/users/me`와 `/users/nickname-availability`에도 인증이 필요하며,
 현재 CSRF 검사는 비활성화되어 있고, 인증 쿠키의 SameSite 기본값은 Strict입니다.
 
 JWT 인증 업무는 `domain/auth`에서 관리합니다. `controller/TokenController`는 재발급·로그아웃 API를,
-`service/TokenSessionService`는 로그인 세션·재발급·폐기를 담당합니다.
-리프레시 토큰과 블랙리스트는 `entity`, `repository`에 두고,
-만료된 기록은 `scheduler/TokenCleanupScheduler`에서 정리합니다.
+`service/TokenService`는 로그인 세션·재발급·폐기를 담당합니다.
+리프레시 토큰과 블랙리스트는 `repository/RedisTokenRepository`에서 관리합니다.
 같은 `domain/auth`의 `provider/JwtTokenProvider`는 JWT 생성·검증을,
-`cookie/TokenCookieManager`는 쿠키 처리를 담당합니다. 쿠키 관리와 예약 작업은 `@Component`로 등록합니다.
-인증 정보인 `AuthInfo`, JWT 발급 결과인 `TokenPair`와 공통 토큰 오류인 `TokenErrorCode`도 이 패키지에서 관리합니다.
+`cookie/TokenCookieManager`는 쿠키 처리를 담당합니다.
+OAuth 인증 정보인 `AuthInfo`는 `global/security/dto`에서, JWT 발급 결과인 `TokenPair`와 공통 토큰 오류인 `TokenErrorCode`는 `domain/auth`에서 관리합니다.
 `User`가 기존 OAuth 연결의 덮어쓰기를 막으며, 서비스는 이메일·OAuth 식별자 중복만 가입 충돌로 처리합니다.
 
 Spring Security 연동은 `global/security`에 둡니다. OAuth2/OIDC 사용자 정보 조회는 `service`,
