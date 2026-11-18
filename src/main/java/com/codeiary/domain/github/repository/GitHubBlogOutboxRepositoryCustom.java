@@ -6,18 +6,17 @@ import java.util.List;
 import java.util.Optional;
 
 public interface GitHubBlogOutboxRepositoryCustom {
-    List<ClaimedWork> claimDue(int limit, int maxFailures);
+  List<ClaimedWork> claimDue(int limit, int maxFailures);
 
-    void markEnqueued(ClaimedWork work);
+  void markEnqueued(ClaimedWork work);
 
-    void retryNextCycle(ClaimedWork work, int maxFailures);
+  void retryNextCycle(ClaimedWork work, int maxFailures);
 
-    Optional<ProcessingWork> claimForProcessing(long id);
+  Optional<ProcessingWork> claimForProcessing(long id);
 
-    boolean markCompleted(ProcessingWork work);
+  boolean markCompleted(ProcessingWork work);
 
-    boolean retryProcessing(ProcessingWork work, int maxFailures);
+  boolean retryProcessing(ProcessingWork work, int maxFailures);
 
-    boolean isFinishedOrMissing(long id);
-
+  boolean isFinishedOrMissing(long id);
 }

@@ -1,4 +1,3 @@
 package com.codeiary.domain.portfolio.dto.response;
 
-public record PortfolioCreateResponse(Long id) {
-}
+public record PortfolioCreateResponse(Long id) {}

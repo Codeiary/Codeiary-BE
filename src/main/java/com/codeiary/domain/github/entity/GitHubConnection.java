@@ -21,46 +21,52 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class GitHubConnection extends TimeBaseEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false, unique = true)
-    private User user;
+  @OneToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "user_id", nullable = false, unique = true)
+  private User user;
 
-    @Column(nullable = false, unique = true)
-    private Long githubUserId;
-    @Column(nullable = false, length = 39)
-    private String githubLogin;
-    private Long installationId;
-    private Long repositoryId;
-    @Column(length = 39)
-    private String repositoryOwner;
-    @Column(length = 100)
-    private String repositoryName;
-    @Column(length = 255)
-    private String branch;
+  @Column(nullable = false, unique = true)
+  private Long githubUserId;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private GitHubConnection(User user, Long githubUserId) {
-        this.user = user;
-        this.githubUserId = githubUserId;
-    }
+  @Column(nullable = false, length = 39)
+  private String githubLogin;
 
-    public static GitHubConnection create(User user, Long githubUserId) {
-        return GitHubConnection.builder().user(user).githubUserId(githubUserId).build();
-    }
+  private Long installationId;
+  private Long repositoryId;
 
-    public void connect(String login) {
-        githubLogin = login;
-    }
+  @Column(length = 39)
+  private String repositoryOwner;
 
-    public void connectRepository(Long installationId, Long repositoryId, String owner, String name, String branch) {
-        this.installationId = installationId;
-        this.repositoryId = repositoryId;
-        this.repositoryOwner = owner;
-        this.repositoryName = name;
-        this.branch = branch;
-    }
+  @Column(length = 100)
+  private String repositoryName;
+
+  @Column(length = 255)
+  private String branch;
+
+  @Builder(access = AccessLevel.PRIVATE)
+  private GitHubConnection(User user, Long githubUserId) {
+    this.user = user;
+    this.githubUserId = githubUserId;
+  }
+
+  public static GitHubConnection create(User user, Long githubUserId) {
+    return GitHubConnection.builder().user(user).githubUserId(githubUserId).build();
+  }
+
+  public void connect(String login) {
+    githubLogin = login;
+  }
+
+  public void connectRepository(
+      Long installationId, Long repositoryId, String owner, String name, String branch) {
+    this.installationId = installationId;
+    this.repositoryId = repositoryId;
+    this.repositoryOwner = owner;
+    this.repositoryName = name;
+    this.branch = branch;
+  }
 }

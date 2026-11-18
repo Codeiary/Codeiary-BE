@@ -15,30 +15,32 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "blog_post_tag", uniqueConstraints = @UniqueConstraint(columnNames = {"post_id", "tag_id"}))
+@Table(
+    name = "blog_post_tag",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"post_id", "tag_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class BlogPostTag {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "post_id", nullable = false)
-    private BlogPost post;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "post_id", nullable = false)
+  private BlogPost post;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "tag_id", nullable = false)
-    private Tag tag;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "tag_id", nullable = false)
+  private Tag tag;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private BlogPostTag(BlogPost post, Tag tag) {
-        this.post = post;
-        this.tag = tag;
-    }
+  @Builder(access = AccessLevel.PRIVATE)
+  private BlogPostTag(BlogPost post, Tag tag) {
+    this.post = post;
+    this.tag = tag;
+  }
 
-    public static BlogPostTag create(BlogPost post, Tag tag) {
-        return BlogPostTag.builder().post(post).tag(tag).build();
-    }
+  public static BlogPostTag create(BlogPost blogPost, Tag tag) {
+    return BlogPostTag.builder().post(blogPost).tag(tag).build();
+  }
 }

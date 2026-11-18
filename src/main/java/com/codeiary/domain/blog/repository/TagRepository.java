@@ -9,13 +9,16 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface TagRepository extends JpaRepository<Tag, Long> {
 
-    List<Tag> findByNameInOrderByNameAsc(Collection<String> names);
+  List<Tag> findByNameInOrderByNameAsc(Collection<String> names);
 
-    @Modifying
-    @Query(value = """
-            INSERT INTO tag (name, created_at, updated_at)
-            VALUES (:name, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-            ON CONFLICT (name) DO NOTHING
-            """, nativeQuery = true)
-    void insertIfAbsent(String name);
+  @Modifying
+  @Query(
+      value =
+          """
+          INSERT INTO tag (name, created_at, updated_at)
+          VALUES (:name, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+          ON CONFLICT (name) DO NOTHING
+          """,
+      nativeQuery = true)
+  void insertIfAbsent(String name);
 }

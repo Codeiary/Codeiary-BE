@@ -17,30 +17,32 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "post_like", uniqueConstraints = @UniqueConstraint(columnNames = {"post_id", "user_id"}))
+@Table(
+    name = "post_like",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"post_id", "user_id"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class PostLike extends TimeBaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "post_id", nullable = false)
-    private BlogPost post;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "post_id", nullable = false)
+  private BlogPost post;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "user_id", nullable = false)
+  private User user;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private PostLike(BlogPost post, User user) {
-        this.post = post;
-        this.user = user;
-    }
+  @Builder(access = AccessLevel.PRIVATE)
+  private PostLike(BlogPost post, User user) {
+    this.post = post;
+    this.user = user;
+  }
 
-    public static PostLike create(BlogPost post, User user) {
-        return PostLike.builder().post(post).user(user).build();
-    }
+  public static PostLike create(BlogPost blogPost, User user) {
+    return PostLike.builder().post(blogPost).user(user).build();
+  }
 }

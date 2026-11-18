@@ -1,4 +1,3 @@
 package com.codeiary.domain.github.dto.outbox;
 
-public record ClaimedWork(long id, int claimVersion) {
-}
+public record ClaimedWork(long id, int claimVersion) {}

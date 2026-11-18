@@ -1,18 +1,18 @@
 package com.codeiary.domain.comment.service;
 
+import com.codeiary.domain.blog.entity.BlogPost;
+import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.comment.dto.CommentMapper;
 import com.codeiary.domain.comment.dto.request.CommentCreateRequest;
 import com.codeiary.domain.comment.dto.request.CommentUpdateRequest;
 import com.codeiary.domain.comment.dto.response.CommentResponse;
 import com.codeiary.domain.comment.entity.Comment;
 import com.codeiary.domain.comment.entity.CommentTargetType;
-import com.codeiary.domain.blog.entity.BlogPost;
 import com.codeiary.domain.comment.exception.CommentErrorCode;
 import com.codeiary.domain.comment.repository.CommentRepository;
-import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.user.entity.User;
-import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.exception.CommonErrorCode;
+import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.logging.LogExecution;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -24,71 +24,86 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class CommentService {
 
-    private final CommentRepository comments;
-    private final BlogPostRepository posts;
-    private final CommentMapper commentMapper;
+  private final CommentRepository commentRepository;
+  private final BlogPostRepository blogPostRepository;
+  private final CommentMapper commentMapper;
 
-    @LogExecution
-    public List<CommentResponse> getComments(Long postId, User viewer) {
-        findReadablePost(postId, viewer);
-        return comments.findAllByTargetTypeAndTargetIdOrderByCreatedAtAscIdAsc(CommentTargetType.BLOG_POST, postId).stream()
-                .map(commentMapper::toResponse)
-                .toList();
-    }
+  @LogExecution
+  public List<CommentResponse> getComments(Long postId, User user) {
+    findReadablePost(postId, user);
+    return commentRepository
+        .findAllByTargetTypeAndTargetIdOrderByCreatedAtAscIdAsc(CommentTargetType.BLOG_POST, postId)
+        .stream()
+        .map(commentMapper::toResponse)
+        .toList();
+  }
 
-    @Transactional
-    @LogExecution
-    public CommentResponse create(Long postId, User author, CommentCreateRequest request) {
-        BlogPost post = findReadablePost(postId, author);
-        Comment parent = request.parentId() == null ? null : findReplyParent(postId, request.parentId());
-        Comment comment = Comment.create(CommentTargetType.BLOG_POST, post.getId(), author, parent,
-                request.content().trim());
-        return commentMapper.toResponse(comments.save(comment));
-    }
+  @Transactional
+  @LogExecution
+  public CommentResponse create(Long postId, User user, CommentCreateRequest commentCreateRequest) {
+    BlogPost blogPost = findReadablePost(postId, user);
+    Comment parent =
+        commentCreateRequest.parentId() == null
+            ? null
+            : findReplyParent(postId, commentCreateRequest.parentId());
+    Comment comment =
+        Comment.create(
+            CommentTargetType.BLOG_POST,
+            blogPost.getId(),
+            user,
+            parent,
+            commentCreateRequest.content().trim());
+    return commentMapper.toResponse(commentRepository.save(comment));
+  }
 
-    @Transactional
-    @LogExecution
-    public CommentResponse update(Long postId, Long commentId, User author,
-                                     CommentUpdateRequest request) {
-        Comment comment = findOwnedComment(postId, commentId, author);
-        comment.update(request.content().trim());
-        return commentMapper.toResponse(comment);
-    }
+  @Transactional
+  @LogExecution
+  public CommentResponse update(
+      Long postId, Long commentId, User user, CommentUpdateRequest commentUpdateRequest) {
+    Comment comment = findOwnedComment(postId, commentId, user);
+    comment.update(commentUpdateRequest.content().trim());
+    return commentMapper.toResponse(comment);
+  }
 
-    @Transactional
-    @LogExecution
-    public void delete(Long postId, Long commentId, User author) {
-        findOwnedComment(postId, commentId, author).delete();
-    }
+  @Transactional
+  @LogExecution
+  public void delete(Long postId, Long commentId, User user) {
+    findOwnedComment(postId, commentId, user).delete();
+  }
 
-    private BlogPost findReadablePost(Long postId, User viewer) {
-        BlogPost post = posts.findById(postId)
-                .orElseThrow(() -> new RestApiException(CommonErrorCode.RESOURCE_NOT_FOUND));
-        if (!post.isPublicPost() && !post.isWrittenBy(viewer)) {
-            throw new RestApiException(CommonErrorCode.RESOURCE_NOT_FOUND);
-        }
-        return post;
+  private BlogPost findReadablePost(Long postId, User user) {
+    BlogPost blogPost =
+        blogPostRepository
+            .findById(postId)
+            .orElseThrow(() -> new RestApiException(CommonErrorCode.RESOURCE_NOT_FOUND));
+    if (!blogPost.isPublicPost() && !blogPost.isWrittenBy(user)) {
+      throw new RestApiException(CommonErrorCode.RESOURCE_NOT_FOUND);
     }
+    return blogPost;
+  }
 
-    private Comment findReplyParent(Long postId, Long parentId) {
-        Comment parent = comments.findByIdAndTargetTypeAndTargetId(parentId, CommentTargetType.BLOG_POST, postId)
-                .orElseThrow(() -> new RestApiException(CommentErrorCode.COMMENT_REPLY_NOT_ALLOWED));
-        if (!parent.isRoot() || parent.isDeleted()) {
-            throw new RestApiException(CommentErrorCode.COMMENT_REPLY_NOT_ALLOWED);
-        }
-        return parent;
+  private Comment findReplyParent(Long postId, Long parentId) {
+    Comment comment =
+        commentRepository
+            .findByIdAndTargetTypeAndTargetId(parentId, CommentTargetType.BLOG_POST, postId)
+            .orElseThrow(() -> new RestApiException(CommentErrorCode.COMMENT_REPLY_NOT_ALLOWED));
+    if (!comment.isRoot() || comment.isDeleted()) {
+      throw new RestApiException(CommentErrorCode.COMMENT_REPLY_NOT_ALLOWED);
     }
+    return comment;
+  }
 
-    private Comment findOwnedComment(Long postId, Long commentId, User author) {
-        Comment comment = comments.findByIdAndTargetTypeAndTargetId(
-                        commentId, CommentTargetType.BLOG_POST, postId)
-                .orElseThrow(() -> new RestApiException(CommentErrorCode.COMMENT_NOT_FOUND));
-        if (!comment.isWrittenBy(author)) {
-            throw new RestApiException(CommentErrorCode.COMMENT_ACCESS_DENIED);
-        }
-        if (comment.isDeleted()) {
-            throw new RestApiException(CommentErrorCode.COMMENT_NOT_FOUND);
-        }
-        return comment;
+  private Comment findOwnedComment(Long postId, Long commentId, User user) {
+    Comment comment =
+        commentRepository
+            .findByIdAndTargetTypeAndTargetId(commentId, CommentTargetType.BLOG_POST, postId)
+            .orElseThrow(() -> new RestApiException(CommentErrorCode.COMMENT_NOT_FOUND));
+    if (!comment.isWrittenBy(user)) {
+      throw new RestApiException(CommentErrorCode.COMMENT_ACCESS_DENIED);
     }
+    if (comment.isDeleted()) {
+      throw new RestApiException(CommentErrorCode.COMMENT_NOT_FOUND);
+    }
+    return comment;
+  }
 }

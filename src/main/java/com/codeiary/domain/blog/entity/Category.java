@@ -18,29 +18,31 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "category", uniqueConstraints = @UniqueConstraint(columnNames = {"author_id", "name"}))
+@Table(
+    name = "category",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"author_id", "name"}))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Category extends TimeBaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "author_id", nullable = false)
-    private User author;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "author_id", nullable = false)
+  private User author;
 
-    @Column(nullable = false, length = 100)
-    private String name;
+  @Column(nullable = false, length = 100)
+  private String name;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private Category(User author, String name) {
-        this.author = author;
-        this.name = name;
-    }
+  @Builder(access = AccessLevel.PRIVATE)
+  private Category(User author, String name) {
+    this.author = author;
+    this.name = name;
+  }
 
-    public static Category create(User author, String name) {
-        return Category.builder().author(author).name(name).build();
-    }
+  public static Category create(User user, String name) {
+    return Category.builder().author(user).name(name).build();
+  }
 }

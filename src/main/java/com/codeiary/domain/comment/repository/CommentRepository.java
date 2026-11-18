@@ -9,8 +9,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface CommentRepository extends JpaRepository<Comment, Long> {
 
-    @EntityGraph(attributePaths = "author")
-    List<Comment> findAllByTargetTypeAndTargetIdOrderByCreatedAtAscIdAsc(CommentTargetType targetType, Long targetId);
+  @EntityGraph(attributePaths = "author")
+  List<Comment> findAllByTargetTypeAndTargetIdOrderByCreatedAtAscIdAsc(
+      CommentTargetType targetType, Long targetId);
 
-    Optional<Comment> findByIdAndTargetTypeAndTargetId(Long id, CommentTargetType targetType, Long targetId);
+  Optional<Comment> findByIdAndTargetTypeAndTargetId(
+      Long id, CommentTargetType targetType, Long targetId);
 }

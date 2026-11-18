@@ -13,15 +13,21 @@ import org.springframework.stereotype.Component;
 @Component
 public class CustomOidcUserService extends OidcUserService {
 
-    @Override
-    @LogExecution
-    public OidcUser loadUser(OidcUserRequest request) {
-        OidcUser user = super.loadUser(request);
-        OAuth2Response profile = OAuth2ResponseFactory.from(
-                request.getClientRegistration().getRegistrationId(), user.getAttributes());
-        AuthInfo authInfo = new AuthInfo(
-                profile.getProvider(), profile.getSubject(), profile.getEmail(), profile.getName(),
-                profile.isEmailVerified(), profile.isEmailAuthoritative());
-        return new CustomOidcUser(user, authInfo);
-    }
+  @Override
+  @LogExecution
+  public OidcUser loadUser(OidcUserRequest oidcUserRequest) {
+    OidcUser oidcUser = super.loadUser(oidcUserRequest);
+    OAuth2Response profile =
+        OAuth2ResponseFactory.from(
+            oidcUserRequest.getClientRegistration().getRegistrationId(), oidcUser.getAttributes());
+    AuthInfo authInfo =
+        new AuthInfo(
+            profile.getProvider(),
+            profile.getSubject(),
+            profile.getEmail(),
+            profile.getName(),
+            profile.isEmailVerified(),
+            profile.isEmailAuthoritative());
+    return new CustomOidcUser(oidcUser, authInfo);
+  }
 }

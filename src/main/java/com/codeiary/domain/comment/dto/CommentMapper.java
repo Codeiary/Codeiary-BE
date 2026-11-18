@@ -11,11 +11,12 @@ import org.mapstruct.Mapping;
 @Mapper(config = MapStructConfig.class)
 public interface CommentMapper {
 
-    @Mapping(target = "parentId", source = "parent.id")
-    CommentResponse toResponse(Comment comment);
+  @Mapping(target = "parentId", source = "parent.id")
+  CommentResponse toResponse(Comment comment);
 
-    default CommentAuthorResponse toAuthor(User user) {
-        return user == null ? null
-                : new CommentAuthorResponse(user.getId(), user.getNickname(), user.getProfileImageUrl());
-    }
+  default CommentAuthorResponse toAuthor(User user) {
+    return user == null
+        ? null
+        : new CommentAuthorResponse(user.getId(), user.getNickname(), user.getProfileImageUrl());
+  }
 }

@@ -5,8 +5,8 @@ import com.codeiary.domain.blog.exception.BlogErrorCode;
 import com.codeiary.domain.blog.repository.BlogPostRepository;
 import com.codeiary.domain.blog.repository.PostLikeRepository;
 import com.codeiary.domain.user.entity.User;
-import com.codeiary.global.logging.LogExecution;
 import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.logging.LogExecution;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,28 +16,28 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional(readOnly = true)
 public class PostLikeService {
 
-    private final BlogPostRepository posts;
-    private final PostLikeRepository postLikes;
+  private final BlogPostRepository blogPostRepository;
+  private final PostLikeRepository postLikeRepository;
 
-    @Transactional
-    @LogExecution
-    public PostLikeResponse like(Long postId, User user) {
-        requirePublicPost(postId);
-        postLikes.addLike(postId, user.getId());
-        return new PostLikeResponse(postLikes.countForPost(postId), true);
-    }
+  @Transactional
+  @LogExecution
+  public PostLikeResponse like(Long postId, User user) {
+    requirePublicPost(postId);
+    postLikeRepository.addLike(postId, user.getId());
+    return new PostLikeResponse(postLikeRepository.countForPost(postId), true);
+  }
 
-    @Transactional
-    @LogExecution
-    public PostLikeResponse unlike(Long postId, User user) {
-        requirePublicPost(postId);
-        postLikes.removeLike(postId, user.getId());
-        return new PostLikeResponse(postLikes.countForPost(postId), false);
-    }
+  @Transactional
+  @LogExecution
+  public PostLikeResponse unlike(Long postId, User user) {
+    requirePublicPost(postId);
+    postLikeRepository.removeLike(postId, user.getId());
+    return new PostLikeResponse(postLikeRepository.countForPost(postId), false);
+  }
 
-    private void requirePublicPost(Long postId) {
-        if (!posts.existsByIdAndPublicPostTrue(postId)) {
-            throw new RestApiException(BlogErrorCode.POST_NOT_FOUND);
-        }
+  private void requirePublicPost(Long postId) {
+    if (!blogPostRepository.existsByIdAndPublicPostTrue(postId)) {
+      throw new RestApiException(BlogErrorCode.POST_NOT_FOUND);
     }
+  }
 }

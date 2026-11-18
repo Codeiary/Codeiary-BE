@@ -4,15 +4,15 @@ import com.codeiary.domain.user.entity.enums.OAuthProvider;
 
 public interface OAuth2Response {
 
-    OAuthProvider getProvider();
+  OAuthProvider getProvider();
 
-    String getSubject();
+  String getSubject();
 
-    String getEmail();
+  String getEmail();
 
-    String getName();
+  String getName();
 
-    boolean isEmailVerified();
+  boolean isEmailVerified();
 
-    boolean isEmailAuthoritative();
+  boolean isEmailAuthoritative();
 }

@@ -11,12 +11,12 @@ import org.springframework.stereotype.Component;
 @Component("githubBlogSyncConfig")
 @ConfigurationProperties(prefix = "github.blog-sync")
 public class GitHubBlogSyncConfig {
-    private int publishIntervalMs;
-    private int publishBatchSize;
-    private int consumeIntervalMs;
-    private int consumeBatchSize;
-    private int maxFailures;
-    private Duration reclaimAfter;
-    private String consumerGroup;
-    private String streamKey;
+  private int publishIntervalMs;
+  private int publishBatchSize;
+  private int consumeIntervalMs;
+  private int consumeBatchSize;
+  private int maxFailures;
+  private Duration reclaimAfter;
+  private String consumerGroup;
+  private String streamKey;
 }

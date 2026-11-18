@@ -18,19 +18,19 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Tag extends TimeBaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(nullable = false, unique = true, length = 30)
-    private String name;
+  @Column(nullable = false, unique = true, length = 30)
+  private String name;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private Tag(String name) {
-        this.name = name;
-    }
+  @Builder(access = AccessLevel.PRIVATE)
+  private Tag(String name) {
+    this.name = name;
+  }
 
-    public static Tag create(String name) {
-        return Tag.builder().name(name).build();
-    }
+  public static Tag create(String name) {
+    return Tag.builder().name(name).build();
+  }
 }

@@ -1,5 +1,13 @@
 # 개발 환경과 테스트
 
+## 코드 스타일
+
+Java 소스는 [Google Java Style](https://google.github.io/styleguide/javaguide.html)을 따르고,
+`google-java-format` 2.0.0으로 정렬합니다. 기본 들여쓰기와 줄 길이는 `.editorconfig`에 둡니다.
+객체 변수와 메서드 파라미터는 타입명을 소문자 카멜케이스로 바꿔 사용합니다
+(`BlogPost blogPost`, `User user`). 값과 컬렉션은 역할이 드러나는 이름을 사용합니다
+(`postId`, `posts`). JSON·DB 매핑 이름과 Lombok 빌더 생성자 파라미터는 외부 계약을 유지합니다.
+
 ## 공통 엔티티
 
 시간 기록이 필요한 엔티티는 `com.codeiary.global.entity.TimeBaseEntity`를 상속합니다.

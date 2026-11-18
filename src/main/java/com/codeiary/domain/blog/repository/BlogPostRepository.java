@@ -5,14 +5,14 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface BlogPostRepository extends JpaRepository<BlogPost, Long>, BlogPostRepositoryCustom {
+public interface BlogPostRepository
+    extends JpaRepository<BlogPost, Long>, BlogPostRepositoryCustom {
 
-    boolean existsByIdAndPublicPostTrue(Long id);
+  boolean existsByIdAndPublicPostTrue(Long id);
 
-    boolean existsByIdAndAuthorId(Long id, Long authorId);
+  boolean existsByIdAndAuthorId(Long id, Long authorId);
 
-    @Override
-    @EntityGraph(attributePaths = {"author", "category", "postTags.tag"})
-    Optional<BlogPost> findById(Long id);
-
+  @Override
+  @EntityGraph(attributePaths = {"author", "category", "postTags.tag"})
+  Optional<BlogPost> findById(Long id);
 }

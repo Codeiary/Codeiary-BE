@@ -8,8 +8,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 @EnableAspectJAutoProxy
 public class CodeiaryBeApplication {
 
-	public static void main(String[] args) {
-		SpringApplication.run(CodeiaryBeApplication.class, args);
-	}
-
+  public static void main(String[] args) {
+    SpringApplication.run(CodeiaryBeApplication.class, args);
+  }
 }
