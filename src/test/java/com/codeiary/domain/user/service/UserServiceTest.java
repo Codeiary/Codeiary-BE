@@ -1,5 +1,14 @@
 package com.codeiary.domain.user.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.never;
+
+import com.codeiary.domain.image.validation.ImageUrlValidator;
 import com.codeiary.domain.user.dto.UserMapper;
 import com.codeiary.domain.user.dto.request.OnboardingRequest;
 import com.codeiary.domain.user.dto.request.UpdateProfileRequest;
@@ -9,7 +18,6 @@ import com.codeiary.domain.user.entity.enums.Role;
 import com.codeiary.domain.user.exception.UserErrorCode;
 import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.domain.user.repository.UserRepository;
-import com.codeiary.domain.image.validation.ImageUrlValidator;
 import com.codeiary.global.exception.CommonErrorCode;
 import com.codeiary.global.exception.RestApiException;
 import com.codeiary.global.security.exception.SecurityErrorCode;
@@ -28,262 +36,289 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.mockito.BDDMockito.willThrow;
-import static org.mockito.Mockito.never;
-
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
-    @Mock
-    private UserRepository users;
+  @Mock private UserRepository users;
 
-    @Mock
-    private ImageUrlValidator imageUrls;
+  @Mock private ImageUrlValidator imageUrls;
 
-    private UserService service;
+  private UserService service;
 
-    @BeforeEach
-    void setUp() {
-        service = new UserService(users, Mappers.getMapper(UserMapper.class), imageUrls);
-    }
+  @BeforeEach
+  void setUp() {
+    service = new UserService(users, Mappers.getMapper(UserMapper.class), imageUrls);
+  }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"blog", "Portfolio", "ADMIN"})
-    @DisplayName("서비스 경로와 충돌하는 닉네임 사용을 거절할 수 있다.")
-    void rejectReservedNickname(String nickname) {
-        assertThat(service.checkNickname(UserFixture.ID, nickname).available()).isFalse();
-        User user = UserFixture.createWithId(Role.PENDING);
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        assertThatThrownBy(() -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest(nickname)))
-                .isInstanceOf(RestApiException.class);
-        then(users).should(never()).saveAndFlush(any());
-    }
+  @ParameterizedTest
+  @ValueSource(strings = {"blog", "Portfolio", "ADMIN"})
+  @DisplayName("서비스 경로와 충돌하는 닉네임 사용을 거절할 수 있다.")
+  void rejectReservedNickname(String nickname) {
+    assertThat(service.checkNickname(UserFixture.ID, nickname).available()).isFalse();
+    User user = UserFixture.createWithId(Role.PENDING);
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    assertThatThrownBy(
+            () -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest(nickname)))
+        .isInstanceOf(RestApiException.class);
+    then(users).should(never()).saveAndFlush(any());
+  }
 
-    @Test
-    @DisplayName("닉네임으로 온보딩을 완료하고 USER 권한을 부여할 수 있다.")
-    void completeOnboarding() {
-        // given
-        User user = UserFixture.createWithId(Role.PENDING);
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.saveAndFlush(user)).willReturn(user);
+  @Test
+  @DisplayName("닉네임으로 온보딩을 완료하고 USER 권한을 부여할 수 있다.")
+  void completeOnboarding() {
+    // given
+    User user = UserFixture.createWithId(Role.PENDING);
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.saveAndFlush(user)).willReturn(user);
 
-        // when
-        UserProfileResponse response = service.completeOnboarding(
-                UserFixture.ID, new OnboardingRequest("기록자"));
+    // when
+    UserProfileResponse userProfileResponse =
+        service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자"));
 
-        // then
-        assertThat(response.nickname()).isEqualTo("기록자");
-        assertThat(response.onboardingCompleted()).isTrue();
-        assertThat(response.profileImageUrl()).isNull();
-        assertThat(response.role()).isEqualTo(Role.USER);
-        then(users).should().findByIdForUpdate(UserFixture.ID);
-        then(users).should().saveAndFlush(user);
-    }
+    // then
+    assertThat(userProfileResponse.nickname()).isEqualTo("기록자");
+    assertThat(userProfileResponse.onboardingCompleted()).isTrue();
+    assertThat(userProfileResponse.profileImageUrl()).isNull();
+    assertThat(userProfileResponse.role()).isEqualTo(Role.USER);
+    then(users).should().findByIdForUpdate(UserFixture.ID);
+    then(users).should().saveAndFlush(user);
+  }
 
-    @Test
-    @DisplayName("로그인 정보와 권한을 유지하며 공개 프로필을 수정할 수 있다.")
-    void updateProfile() {
-        // given
-        User user = UserFixture.createWithId();
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.saveAndFlush(user)).willReturn(user);
-        UpdateProfileRequest request = new UpdateProfileRequest(
-                "기록자", "https://img.example.com/photo.jpg", "https://github.com/writer", "contact@example.com");
+  @Test
+  @DisplayName("로그인 정보와 권한을 유지하며 공개 프로필을 수정할 수 있다.")
+  void updateProfile() {
+    // given
+    User user = UserFixture.createWithId();
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.saveAndFlush(user)).willReturn(user);
+    UpdateProfileRequest updateProfileRequest =
+        new UpdateProfileRequest(
+            "기록자",
+            "https://img.example.com/photo.jpg",
+            "https://github.com/writer",
+            "contact@example.com");
 
-        // when
-        UserProfileResponse response = service.updateProfile(UserFixture.ID, request);
+    // when
+    UserProfileResponse userProfileResponse =
+        service.updateProfile(UserFixture.ID, updateProfileRequest);
 
-        // then
-        assertThat(response.nickname()).isEqualTo(request.nickname());
-        assertThat(response.profileImageUrl()).isEqualTo(request.profileImageUrl());
-        then(imageUrls).should().validate(request.profileImageUrl());
-        assertThat(response.githubUrl()).isEqualTo(request.githubUrl());
-        assertThat(response.contactEmail()).isEqualTo(request.contactEmail());
-        assertThat(response.email()).isEqualTo(UserFixture.EMAIL);
-        assertThat(response.role()).isEqualTo(Role.ADMIN);
-    }
+    // then
+    assertThat(userProfileResponse.nickname()).isEqualTo(updateProfileRequest.nickname());
+    assertThat(userProfileResponse.profileImageUrl())
+        .isEqualTo(updateProfileRequest.profileImageUrl());
+    then(imageUrls).should().validate(updateProfileRequest.profileImageUrl());
+    assertThat(userProfileResponse.githubUrl()).isEqualTo(updateProfileRequest.githubUrl());
+    assertThat(userProfileResponse.contactEmail()).isEqualTo(updateProfileRequest.contactEmail());
+    assertThat(userProfileResponse.email()).isEqualTo(UserFixture.EMAIL);
+    assertThat(userProfileResponse.role()).isEqualTo(Role.ADMIN);
+  }
 
-    @Test
-    @DisplayName("이미지 주소 검증에 실패하면 프로필 저장을 거절할 수 있다.")
-    void rejectInvalidImageUrl() {
-        // given
-        var request = new UpdateProfileRequest("기록자", "http://localhost:9090/codeiary-local/photo.jpg", null, null);
-        willThrow(new RestApiException(CommonErrorCode.INVALID_PARAMETER))
-                .given(imageUrls).validate(request.profileImageUrl());
+  @Test
+  @DisplayName("이미지 주소 검증에 실패하면 프로필 저장을 거절할 수 있다.")
+  void rejectInvalidImageUrl() {
+    // given
+    var request =
+        new UpdateProfileRequest(
+            "기록자", "http://localhost:9090/codeiary-local/photo.jpg", null, null);
+    willThrow(new RestApiException(CommonErrorCode.INVALID_PARAMETER))
+        .given(imageUrls)
+        .validate(request.profileImageUrl());
 
-        // when / then
-        assertThatThrownBy(() -> service.updateProfile(UserFixture.ID, request))
-                .isInstanceOfSatisfying(RestApiException.class,
-                        error -> assertThat(error.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_PARAMETER));
-        then(users).shouldHaveNoInteractions();
-    }
+    // when / then
+    assertThatThrownBy(() -> service.updateProfile(UserFixture.ID, request))
+        .isInstanceOfSatisfying(
+            RestApiException.class,
+            error -> assertThat(error.getErrorCode()).isEqualTo(CommonErrorCode.INVALID_PARAMETER));
+    then(users).shouldHaveNoInteractions();
+  }
 
-    @Test
-    @DisplayName("비워 둔 프로필 사진과 공개 연락처를 삭제할 수 있다.")
-    void clearOptionalProfile() {
-        // given
-        User user = UserFixture.createWithId();
-        user.updatePublicProfile("기록자", "https://img.example.com/photo.jpg",
-                "https://github.com/writer", "contact@example.com");
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.saveAndFlush(user)).willReturn(user);
+  @Test
+  @DisplayName("비워 둔 프로필 사진과 공개 연락처를 삭제할 수 있다.")
+  void clearOptionalProfile() {
+    // given
+    User user = UserFixture.createWithId();
+    user.updatePublicProfile(
+        "기록자",
+        "https://img.example.com/photo.jpg",
+        "https://github.com/writer",
+        "contact@example.com");
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.saveAndFlush(user)).willReturn(user);
 
-        // when
-        UserProfileResponse response = service.updateProfile(
-                UserFixture.ID, new UpdateProfileRequest("기록자", "", null, ""));
+    // when
+    UserProfileResponse userProfileResponse =
+        service.updateProfile(UserFixture.ID, new UpdateProfileRequest("기록자", "", null, ""));
 
-        // then
-        assertThat(response.profileImageUrl()).isNull();
-        assertThat(response.githubUrl()).isNull();
-        assertThat(response.contactEmail()).isNull();
-        assertThat(response.email()).isEqualTo(UserFixture.EMAIL);
-    }
+    // then
+    assertThat(userProfileResponse.profileImageUrl()).isNull();
+    assertThat(userProfileResponse.githubUrl()).isNull();
+    assertThat(userProfileResponse.contactEmail()).isNull();
+    assertThat(userProfileResponse.email()).isEqualTo(UserFixture.EMAIL);
+  }
 
-    @Test
-    @DisplayName("다른 사용자가 사용 중인 닉네임을 거절할 수 있다.")
-    void rejectTakenNickname() {
-        // given
-        User user = UserFixture.createWithId(Role.PENDING);
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.existsByNicknameIgnoreCaseAndIdNot("기록자", UserFixture.ID)).willReturn(true);
+  @Test
+  @DisplayName("다른 사용자가 사용 중인 닉네임을 거절할 수 있다.")
+  void rejectTakenNickname() {
+    // given
+    User user = UserFixture.createWithId(Role.PENDING);
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.existsByNicknameIgnoreCaseAndIdNot("기록자", UserFixture.ID)).willReturn(true);
 
-        // when, then
-        assertThatThrownBy(() -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자")))
-                .isInstanceOfSatisfying(RestApiException.class,
-                        exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NICKNAME_TAKEN));
-        then(users).should(never()).saveAndFlush(any());
-        assertThat(user.getNickname()).isNull();
-        assertThat(user.getRole()).isEqualTo(Role.PENDING);
-    }
+    // when, then
+    assertThatThrownBy(
+            () -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자")))
+        .isInstanceOfSatisfying(
+            RestApiException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NICKNAME_TAKEN));
+    then(users).should(never()).saveAndFlush(any());
+    assertThat(user.getNickname()).isNull();
+    assertThat(user.getRole()).isEqualTo(Role.PENDING);
+  }
 
-    @Test
-    @DisplayName("동시에 저장된 중복 닉네임을 충돌로 처리할 수 있다.")
-    void rejectConcurrentNickname() {
-        // given
-        User user = UserFixture.createWithId();
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.saveAndFlush(user)).willThrow(new DataIntegrityViolationException("duplicate",
-                new ConstraintViolationException("duplicate", new SQLException(), "uk_users_nickname")));
+  @Test
+  @DisplayName("동시에 저장된 중복 닉네임을 충돌로 처리할 수 있다.")
+  void rejectConcurrentNickname() {
+    // given
+    User user = UserFixture.createWithId();
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.saveAndFlush(user))
+        .willThrow(
+            new DataIntegrityViolationException(
+                "duplicate",
+                new ConstraintViolationException(
+                    "duplicate", new SQLException(), "uk_users_nickname")));
 
-        // when, then
-        assertThatThrownBy(() -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자")))
-                .isInstanceOfSatisfying(RestApiException.class,
-                        exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NICKNAME_TAKEN));
-    }
+    // when, then
+    assertThatThrownBy(
+            () -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자")))
+        .isInstanceOfSatisfying(
+            RestApiException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NICKNAME_TAKEN));
+  }
 
-    @Test
-    @DisplayName("닉네임과 무관한 저장 오류를 구분할 수 있다.")
-    void preserveOtherPersistenceErrors() {
-        // given
-        User user = UserFixture.createWithId();
-        DataIntegrityViolationException failure = new DataIntegrityViolationException("other constraint");
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.saveAndFlush(user)).willThrow(failure);
+  @Test
+  @DisplayName("닉네임과 무관한 저장 오류를 구분할 수 있다.")
+  void preserveOtherPersistenceErrors() {
+    // given
+    User user = UserFixture.createWithId();
+    DataIntegrityViolationException dataIntegrityViolationException =
+        new DataIntegrityViolationException("other constraint");
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.saveAndFlush(user)).willThrow(dataIntegrityViolationException);
 
-        // when, then
-        assertThatThrownBy(() -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자")))
-                .isSameAs(failure);
-    }
+    // when, then
+    assertThatThrownBy(
+            () -> service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자")))
+        .isSameAs(dataIntegrityViolationException);
+  }
 
-    @Test
-    @DisplayName("내 계정을 제외하고 닉네임 사용 가능 여부를 확인할 수 있다.")
-    void checkNicknameAvailability() {
-        // given
-        given(users.existsByNicknameIgnoreCaseAndIdNot("기록자", UserFixture.ID)).willReturn(false);
-        given(users.existsByNicknameIgnoreCaseAndIdNot("다른기록자", UserFixture.ID)).willReturn(true);
+  @Test
+  @DisplayName("내 계정을 제외하고 닉네임 사용 가능 여부를 확인할 수 있다.")
+  void checkNicknameAvailability() {
+    // given
+    given(users.existsByNicknameIgnoreCaseAndIdNot("기록자", UserFixture.ID)).willReturn(false);
+    given(users.existsByNicknameIgnoreCaseAndIdNot("다른기록자", UserFixture.ID)).willReturn(true);
 
-        // when, then
-        assertThat(service.checkNickname(UserFixture.ID, "기록자").available()).isTrue();
-        assertThat(service.checkNickname(UserFixture.ID, "다른기록자").available()).isFalse();
-    }
+    // when, then
+    assertThat(service.checkNickname(UserFixture.ID, "기록자").available()).isTrue();
+    assertThat(service.checkNickname(UserFixture.ID, "다른기록자").available()).isFalse();
+  }
 
-    @ParameterizedTest
-    @NullAndEmptySource
-    @ValueSource(strings = {"a", "두 단어", "잘못된!닉네임"})
-    @DisplayName("허용되지 않은 닉네임을 거절할 수 있다.")
-    void rejectInvalidNickname(String nickname) {
-        // when, then
-        assertThatThrownBy(() -> service.checkNickname(UserFixture.ID, nickname))
-                .isInstanceOfSatisfying(RestApiException.class,
-                        exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.INVALID_NICKNAME));
-        then(users).shouldHaveNoInteractions();
-    }
+  @ParameterizedTest
+  @NullAndEmptySource
+  @ValueSource(strings = {"a", "두 단어", "잘못된!닉네임"})
+  @DisplayName("허용되지 않은 닉네임을 거절할 수 있다.")
+  void rejectInvalidNickname(String nickname) {
+    // when, then
+    assertThatThrownBy(() -> service.checkNickname(UserFixture.ID, nickname))
+        .isInstanceOfSatisfying(
+            RestApiException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.INVALID_NICKNAME));
+    then(users).shouldHaveNoInteractions();
+  }
 
-    @Test
-    @DisplayName("사용자 ID와 닉네임으로 공개 프로필을 조회할 수 있다.")
-    void readPublicProfile() {
-        // given
-        User user = UserFixture.createWithId();
-        user.updatePublicProfile("Writer", null, "https://github.com/writer", "contact@example.com");
-        given(users.findById(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.findByNicknameIgnoreCase("writer")).willReturn(Optional.of(user));
+  @Test
+  @DisplayName("사용자 ID와 닉네임으로 공개 프로필을 조회할 수 있다.")
+  void readPublicProfile() {
+    // given
+    User user = UserFixture.createWithId();
+    user.updatePublicProfile("Writer", null, "https://github.com/writer", "contact@example.com");
+    given(users.findById(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.findByNicknameIgnoreCase("writer")).willReturn(Optional.of(user));
 
-        // when, then
-        assertThat(service.getPublicProfile(UserFixture.ID))
-                .isEqualTo(service.getPublicProfileByNickname("writer"))
-                .satisfies(profile -> {
-                    assertThat(profile.nickname()).isEqualTo("Writer");
-                    assertThat(profile.contactEmail()).isEqualTo("contact@example.com");
-                });
-    }
+    // when, then
+    assertThat(service.getPublicProfile(UserFixture.ID))
+        .isEqualTo(service.getPublicProfileByNickname("writer"))
+        .satisfies(profile -> {
+          assertThat(profile.nickname()).isEqualTo("Writer");
+          assertThat(profile.contactEmail()).isEqualTo("contact@example.com");
+        });
+  }
 
-    @Test
-    @DisplayName("비활성 계정과 온보딩 전 계정의 공개 조회를 차단할 수 있다.")
-    void hideUnavailableProfiles() {
-        // given
-        User disabled = UserFixture.createWithId();
-        disabled.updateProfile("기록자", null);
-        disabled.disable();
-        given(users.findById(UserFixture.ID)).willReturn(Optional.of(disabled));
-        given(users.findByNicknameIgnoreCase("미완료")).willReturn(Optional.of(UserFixture.createWithId(Role.PENDING)));
+  @Test
+  @DisplayName("비활성 계정과 온보딩 전 계정의 공개 조회를 차단할 수 있다.")
+  void hideUnavailableProfiles() {
+    // given
+    User user = UserFixture.createWithId();
+    user.updateProfile("기록자", null);
+    user.disable();
+    given(users.findById(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.findByNicknameIgnoreCase("미완료"))
+        .willReturn(Optional.of(UserFixture.createWithId(Role.PENDING)));
 
-        // when, then
-        assertThatThrownBy(() -> service.getPublicProfile(UserFixture.ID))
-                .isInstanceOfSatisfying(RestApiException.class,
-                        exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NOT_FOUND_USER));
-        assertThatThrownBy(() -> service.getPublicProfileByNickname("미완료"))
-                .isInstanceOfSatisfying(RestApiException.class,
-                        exception -> assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NOT_FOUND_USER));
-    }
+    // when, then
+    assertThatThrownBy(() -> service.getPublicProfile(UserFixture.ID))
+        .isInstanceOfSatisfying(
+            RestApiException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NOT_FOUND_USER));
+    assertThatThrownBy(() -> service.getPublicProfileByNickname("미완료"))
+        .isInstanceOfSatisfying(
+            RestApiException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(UserErrorCode.NOT_FOUND_USER));
+  }
 
-    @Test
-    @DisplayName("비활성화된 계정의 프로필 변경을 차단할 수 있다.")
-    void rejectDisabledUser() {
-        // given
-        User user = UserFixture.createWithId();
-        user.disable();
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+  @Test
+  @DisplayName("비활성화된 계정의 프로필 변경을 차단할 수 있다.")
+  void rejectDisabledUser() {
+    // given
+    User user = UserFixture.createWithId();
+    user.disable();
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
 
-        // when, then
-        assertThatThrownBy(() -> service.updateProfile(UserFixture.ID,
-                new UpdateProfileRequest("기록자", null, null, null)))
-                .isInstanceOfSatisfying(RestApiException.class,
-                        exception -> assertThat(exception.getErrorCode()).isEqualTo(SecurityErrorCode.UNAUTHORIZED));
-        then(users).should(never()).saveAndFlush(any());
-    }
+    // when, then
+    assertThatThrownBy(() ->
+            service.updateProfile(
+                UserFixture.ID, new UpdateProfileRequest("기록자", null, null, null)))
+        .isInstanceOfSatisfying(
+            RestApiException.class,
+            exception ->
+                assertThat(exception.getErrorCode()).isEqualTo(SecurityErrorCode.UNAUTHORIZED));
+    then(users).should(never()).saveAndFlush(any());
+  }
 
-    @Test
-    @DisplayName("기존 관리자 권한과 프로필 이미지를 유지하며 온보딩을 완료할 수 있다.")
-    void preserveExistingProfileOnOnboarding() {
-        // given
-        User user = UserFixture.createWithId(Role.ADMIN);
-        user.updateProfile("이전기록자", "https://img.example.com/photo.jpg");
-        given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
-        given(users.saveAndFlush(user)).willReturn(user);
+  @Test
+  @DisplayName("기존 관리자 권한과 프로필 이미지를 유지하며 온보딩을 완료할 수 있다.")
+  void preserveExistingProfileOnOnboarding() {
+    // given
+    User user = UserFixture.createWithId(Role.ADMIN);
+    user.updateProfile("이전기록자", "https://img.example.com/photo.jpg");
+    given(users.findByIdForUpdate(UserFixture.ID)).willReturn(Optional.of(user));
+    given(users.saveAndFlush(user)).willReturn(user);
 
-        // when
-        UserProfileResponse response = service.completeOnboarding(
-                UserFixture.ID, new OnboardingRequest("기록자"));
+    // when
+    UserProfileResponse userProfileResponse =
+        service.completeOnboarding(UserFixture.ID, new OnboardingRequest("기록자"));
 
-        // then
-        assertThat(response.nickname()).isEqualTo("기록자");
-        assertThat(response.role()).isEqualTo(Role.ADMIN);
-        assertThat(response.profileImageUrl()).isEqualTo("https://img.example.com/photo.jpg");
-        then(users).should().saveAndFlush(user);
-    }
+    // then
+    assertThat(userProfileResponse.nickname()).isEqualTo("기록자");
+    assertThat(userProfileResponse.role()).isEqualTo(Role.ADMIN);
+    assertThat(userProfileResponse.profileImageUrl())
+        .isEqualTo("https://img.example.com/photo.jpg");
+    then(users).should().saveAndFlush(user);
+  }
 }

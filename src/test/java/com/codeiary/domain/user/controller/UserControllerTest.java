@@ -1,5 +1,13 @@
 package com.codeiary.domain.user.controller;
 
+import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.then;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
 import com.codeiary.domain.user.dto.request.UpdateProfileRequest;
 import com.codeiary.domain.user.dto.response.NicknameAvailabilityResponse;
 import com.codeiary.domain.user.fixture.UserFixture;
@@ -23,100 +31,104 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-import static org.mockito.BDDMockito.given;
-import static org.mockito.BDDMockito.then;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
 @ExtendWith(MockitoExtension.class)
 class UserControllerTest {
 
-    @Mock
-    private UserService userService;
+  @Mock private UserService userService;
 
-    private MockMvc mockMvc;
+  private MockMvc mockMvc;
 
-    @BeforeEach
-    void setUp() {
-        SecurityContextHolder.getContext().setAuthentication(
-                UsernamePasswordAuthenticationToken.authenticated(UserFixture.createWithId(), null, List.of()));
-        mockMvc = MockMvcBuilders.standaloneSetup(new UserController(userService))
-                .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
-                .setControllerAdvice(new GlobalExceptionHandler())
-                .build();
-    }
+  @BeforeEach
+  void setUp() {
+    SecurityContextHolder.getContext()
+        .setAuthentication(
+            UsernamePasswordAuthenticationToken.authenticated(
+                UserFixture.createWithId(), null, List.of()));
+    mockMvc =
+        MockMvcBuilders.standaloneSetup(new UserController(userService))
+            .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+            .setControllerAdvice(new GlobalExceptionHandler())
+            .build();
+  }
 
-    @AfterEach
-    void clearSecurityContext() {
-        SecurityContextHolder.clearContext();
-    }
+  @AfterEach
+  void clearSecurityContext() {
+    SecurityContextHolder.clearContext();
+  }
 
-    @Test
-    @DisplayName("내 계정을 기준으로 닉네임 중복을 확인할 수 있다.")
-    void checkNickname() throws Exception {
-        // given
-        given(userService.checkNickname(UserFixture.ID, "기록자"))
-                .willReturn(new NicknameAvailabilityResponse(true));
+  @Test
+  @DisplayName("내 계정을 기준으로 닉네임 중복을 확인할 수 있다.")
+  void checkNickname() throws Exception {
+    // given
+    given(userService.checkNickname(UserFixture.ID, "기록자"))
+        .willReturn(new NicknameAvailabilityResponse(true));
 
-        // when
-        MvcResult result = mockMvc.perform(get("/users/nickname-availability")
-                .param("nickname", "기록자")).andReturn();
+    // when
+    MvcResult mvcResult =
+        mockMvc.perform(get("/users/nickname-availability").param("nickname", "기록자")).andReturn();
 
-        // then
-        status().isOk().match(result);
-        jsonPath("$.available").value(true).match(result);
-        then(userService).should().checkNickname(UserFixture.ID, "기록자");
-    }
+    // then
+    status().isOk().match(mvcResult);
+    jsonPath("$.available").value(true).match(mvcResult);
+    then(userService).should().checkNickname(UserFixture.ID, "기록자");
+  }
 
-    @ParameterizedTest
-    @ValueSource(strings = {"", "x", "두 단어"})
-    @DisplayName("비어 있거나 잘못된 닉네임을 거절할 수 있다.")
-    void rejectInvalidOnboarding(String nickname) throws Exception {
-        // when
-        MvcResult result = mockMvc.perform(multipart("/users/me/onboarding")
-                .param("nickname", nickname)).andReturn();
+  @ParameterizedTest
+  @ValueSource(strings = {"", "x", "두 단어"})
+  @DisplayName("비어 있거나 잘못된 닉네임을 거절할 수 있다.")
+  void rejectInvalidOnboarding(String nickname) throws Exception {
+    // when
+    MvcResult mvcResult =
+        mockMvc.perform(multipart("/users/me/onboarding").param("nickname", nickname)).andReturn();
 
-        // then
-        status().isBadRequest().match(result);
-        then(userService).shouldHaveNoInteractions();
-    }
+    // then
+    status().isBadRequest().match(mvcResult);
+    then(userService).shouldHaveNoInteractions();
+  }
 
-    @Test
-    @DisplayName("내 프로필과 공개 연락처를 수정할 수 있다.")
-    void updateProfile() throws Exception {
-        // given
-        UpdateProfileRequest request = new UpdateProfileRequest(
-                "기록자", null, "https://github.com/writer", "contact@example.com");
-        given(userService.updateProfile(UserFixture.ID, request)).willReturn(UserFixture.response());
+  @Test
+  @DisplayName("내 프로필과 공개 연락처를 수정할 수 있다.")
+  void updateProfile() throws Exception {
+    // given
+    UpdateProfileRequest updateProfileRequest =
+        new UpdateProfileRequest("기록자", null, "https://github.com/writer", "contact@example.com");
+    given(userService.updateProfile(UserFixture.ID, updateProfileRequest))
+        .willReturn(UserFixture.response());
 
-        // when
-        MvcResult result = mockMvc.perform(put("/users/me/profile")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+    // when
+    MvcResult mvcResult =
+        mockMvc
+            .perform(
+                put("/users/me/profile")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
                         {"nickname":"기록자","githubUrl":"https://github.com/writer","contactEmail":"contact@example.com"}
-                        """)).andReturn();
+                        """))
+            .andReturn();
 
-        // then
-        status().isOk().match(result);
-        then(userService).should().updateProfile(UserFixture.ID, request);
-    }
+    // then
+    status().isOk().match(mvcResult);
+    then(userService).should().updateProfile(UserFixture.ID, updateProfileRequest);
+  }
 
-    @Test
-    @DisplayName("GitHub 프로필이 아닌 주소를 거절할 수 있다.")
-    void rejectInvalidGithubUrl() throws Exception {
-        // when
-        MvcResult result = mockMvc.perform(put("/users/me/profile")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("""
+  @Test
+  @DisplayName("GitHub 프로필이 아닌 주소를 거절할 수 있다.")
+  void rejectInvalidGithubUrl() throws Exception {
+    // when
+    MvcResult mvcResult =
+        mockMvc
+            .perform(
+                put("/users/me/profile")
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        """
                         {"nickname":"기록자","githubUrl":"https://example.com/writer"}
-                        """)).andReturn();
+                        """))
+            .andReturn();
 
-        // then
-        status().isBadRequest().match(result);
-        then(userService).shouldHaveNoInteractions();
-    }
-
+    // then
+    status().isBadRequest().match(mvcResult);
+    then(userService).shouldHaveNoInteractions();
+  }
 }
