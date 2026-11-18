@@ -14,21 +14,23 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class PortfolioListService {
-    private static final int MAX_PAGE_SIZE = 50;
-    private final PortfolioRepository portfolios;
-    private final PortfolioMapper mapper;
+  private static final int MAX_PAGE_SIZE = 50;
+  private final PortfolioRepository portfolioRepository;
+  private final PortfolioMapper portfolioMapper;
 
-    @LogExecution
-    public PortfolioPageResponse getPublic(Long authorId, String search, int page, int size) {
-        return mapper.toPageResponse(portfolios.findPublicPortfolios(authorId, search, pageable(page, size)));
-    }
+  @LogExecution
+  public PortfolioPageResponse getPublic(Long authorId, String search, int page, int size) {
+    return portfolioMapper.toPageResponse(
+        portfolioRepository.findPublicPortfolios(authorId, search, pageable(page, size)));
+  }
 
-    @LogExecution
-    public PortfolioPageResponse getMine(User user, String search, int page, int size) {
-        return mapper.toPageResponse(portfolios.findAuthorPortfolios(user.getId(), search, pageable(page, size)));
-    }
+  @LogExecution
+  public PortfolioPageResponse getMine(User user, String search, int page, int size) {
+    return portfolioMapper.toPageResponse(
+        portfolioRepository.findAuthorPortfolios(user.getId(), search, pageable(page, size)));
+  }
 
-    private PageRequest pageable(int page, int size) {
-        return PageRequest.of(Math.max(0, page), Math.min(MAX_PAGE_SIZE, Math.max(1, size)));
-    }
+  private PageRequest pageable(int page, int size) {
+    return PageRequest.of(Math.max(0, page), Math.min(MAX_PAGE_SIZE, Math.max(1, size)));
+  }
 }

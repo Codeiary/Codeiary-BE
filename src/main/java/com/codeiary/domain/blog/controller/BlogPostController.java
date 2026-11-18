@@ -5,8 +5,8 @@ import com.codeiary.domain.blog.dto.request.BlogPostSort;
 import com.codeiary.domain.blog.dto.response.BlogPostPageResponse;
 import com.codeiary.domain.blog.dto.response.BlogPostResponse;
 import com.codeiary.domain.blog.dto.response.PostLikeResponse;
-import com.codeiary.domain.blog.service.BlogPostService;
 import com.codeiary.domain.blog.service.BlogPostListService;
+import com.codeiary.domain.blog.service.BlogPostService;
 import com.codeiary.domain.blog.service.PostLikeService;
 import com.codeiary.domain.user.entity.User;
 import com.codeiary.global.logging.LogExecution;
@@ -24,8 +24,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -35,85 +35,83 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "게시글")
 public class BlogPostController {
 
-    private final BlogPostService postService;
-    private final BlogPostListService postListService;
-    private final PostLikeService postLikeService;
+  private final BlogPostService blogPostService;
+  private final BlogPostListService blogPostListService;
+  private final PostLikeService postLikeService;
 
-    @GetMapping
-    @Operation(summary = "공개 게시글 목록 조회", description = "검색·카테고리·태그 필터와 최신순·좋아요순 정렬을 지원합니다.")
-    public BlogPostPageResponse list(
-            @AuthenticationPrincipal User user,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) String tag,
-            @RequestParam(defaultValue = "LATEST") BlogPostSort sort,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "12") int size
-    ) {
-        return postListService.getPublicPosts(search, category, tag, sort, page, size, user);
-    }
+  @GetMapping
+  @Operation(summary = "공개 게시글 목록 조회", description = "검색·카테고리·태그 필터와 최신순·좋아요순 정렬을 지원합니다.")
+  public BlogPostPageResponse list(
+      @AuthenticationPrincipal User user,
+      @RequestParam(required = false) String search,
+      @RequestParam(required = false) String category,
+      @RequestParam(required = false) String tag,
+      @RequestParam(name = "sort", defaultValue = "LATEST") BlogPostSort blogPostSort,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "12") int size) {
+    return blogPostListService.getPublicPosts(
+        search, category, tag, blogPostSort, page, size, user);
+  }
 
-    @GetMapping("/mine")
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "내 게시글 목록 조회", description = "공개·비공개 글을 최신순으로 조회합니다.")
-    public BlogPostPageResponse mine(
-            @AuthenticationPrincipal User user,
-            @RequestParam(required = false) String search,
-            @RequestParam(required = false) String category,
-            @RequestParam(required = false) String tag,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "12") int size
-    ) {
-        return postListService.getMyPosts(user, search, category, tag, page, size);
-    }
+  @GetMapping("/mine")
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "내 게시글 목록 조회", description = "공개·비공개 글을 최신순으로 조회합니다.")
+  public BlogPostPageResponse mine(
+      @AuthenticationPrincipal User user,
+      @RequestParam(required = false) String search,
+      @RequestParam(required = false) String category,
+      @RequestParam(required = false) String tag,
+      @RequestParam(defaultValue = "0") int page,
+      @RequestParam(defaultValue = "12") int size) {
+    return blogPostListService.getMyPosts(user, search, category, tag, page, size);
+  }
 
-    @PostMapping
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "게시글 생성")
-    public ResponseEntity<BlogPostResponse> create(
-            @AuthenticationPrincipal User user,
-            @Valid @RequestBody BlogPostRequest request
-    ) {
-        BlogPostResponse response = postService.create(user, request);
-        return ResponseEntity.created(URI.create("/posts/" + response.id())).body(response);
-    }
+  @PostMapping
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "게시글 생성")
+  public ResponseEntity<BlogPostResponse> create(
+      @AuthenticationPrincipal User user, @Valid @RequestBody BlogPostRequest blogPostRequest) {
+    BlogPostResponse blogPostResponse = blogPostService.create(user, blogPostRequest);
+    return ResponseEntity.created(URI.create("/posts/" + blogPostResponse.id()))
+        .body(blogPostResponse);
+  }
 
-    @GetMapping("/{postId}")
-    @Operation(summary = "게시글 단건 조회", description = "공개 글은 누구나, 비공개 글은 작성자만 조회할 수 있습니다.")
-    public BlogPostResponse get(@PathVariable Long postId, @AuthenticationPrincipal User user) {
-        return postService.get(postId, user);
-    }
+  @GetMapping("/{postId}")
+  @Operation(summary = "게시글 단건 조회", description = "공개 글은 누구나, 비공개 글은 작성자만 조회할 수 있습니다.")
+  public BlogPostResponse get(@PathVariable Long postId, @AuthenticationPrincipal User user) {
+    return blogPostService.get(postId, user);
+  }
 
-    @PutMapping("/{postId}")
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "게시글 수정", description = "작성자만 수정할 수 있습니다. 선택 항목을 비우면 삭제합니다.")
-    public BlogPostResponse update(
-            @PathVariable Long postId,
-            @AuthenticationPrincipal User user,
-            @Valid @RequestBody BlogPostRequest request
-    ) {
-        return postService.update(postId, user, request);
-    }
+  @PutMapping("/{postId}")
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "게시글 수정", description = "작성자만 수정할 수 있습니다. 선택 항목을 비우면 삭제합니다.")
+  public BlogPostResponse update(
+      @PathVariable Long postId,
+      @AuthenticationPrincipal User user,
+      @Valid @RequestBody BlogPostRequest blogPostRequest) {
+    return blogPostService.update(postId, user, blogPostRequest);
+  }
 
-    @DeleteMapping("/{postId}")
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "게시글 삭제", description = "작성자만 삭제할 수 있습니다.")
-    public ResponseEntity<Void> delete(@PathVariable Long postId, @AuthenticationPrincipal User user) {
-        postService.delete(postId, user);
-        return ResponseEntity.noContent().build();
-    }
+  @DeleteMapping("/{postId}")
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "게시글 삭제", description = "작성자만 삭제할 수 있습니다.")
+  public ResponseEntity<Void> delete(
+      @PathVariable Long postId, @AuthenticationPrincipal User user) {
+    blogPostService.delete(postId, user);
+    return ResponseEntity.noContent().build();
+  }
 
-    @PostMapping("/{postId}/likes")
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "게시글 좋아요")
-    public PostLikeResponse like(@PathVariable Long postId, @AuthenticationPrincipal User user) {
-        return postLikeService.like(postId, user);
-    }
+  @PostMapping("/{postId}/likes")
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "게시글 좋아요")
+  public PostLikeResponse like(@PathVariable Long postId, @AuthenticationPrincipal User user) {
+    return postLikeService.like(postId, user);
+  }
 
-    @DeleteMapping("/{postId}/likes")
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "게시글 좋아요 취소")
-    public PostLikeResponse unlike(@PathVariable Long postId, @AuthenticationPrincipal User user) {
-        return postLikeService.unlike(postId, user);
-    }
+  @DeleteMapping("/{postId}/likes")
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "게시글 좋아요 취소")
+  public PostLikeResponse unlike(@PathVariable Long postId, @AuthenticationPrincipal User user) {
+    return postLikeService.unlike(postId, user);
+  }
 }

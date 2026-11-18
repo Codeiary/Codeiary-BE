@@ -4,8 +4,4 @@ import java.time.Instant;
 import java.util.Map;
 
 public record ImageUploadResponse(
-		String uploadUrl,
-		String imageUrl,
-		Map<String, String> headers,
-		Instant expiresAt) {
-}
+    String uploadUrl, String imageUrl, Map<String, String> headers, Instant expiresAt) {}

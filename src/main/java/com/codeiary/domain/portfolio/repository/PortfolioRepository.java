@@ -5,8 +5,9 @@ import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface PortfolioRepository extends JpaRepository<Portfolio, Long>, PortfolioRepositoryCustom {
-    @Override
-    @EntityGraph(attributePaths = {"author", "defaultFont"})
-    Optional<Portfolio> findById(Long id);
+public interface PortfolioRepository
+    extends JpaRepository<Portfolio, Long>, PortfolioRepositoryCustom {
+  @Override
+  @EntityGraph(attributePaths = {"author", "defaultFont"})
+  Optional<Portfolio> findById(Long id);
 }

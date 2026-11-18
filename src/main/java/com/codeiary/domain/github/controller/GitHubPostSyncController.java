@@ -16,12 +16,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 @RequestMapping("/github/posts")
 public class GitHubPostSyncController {
-    private final GitHubBlogOutboxService outbox;
+  private final GitHubBlogOutboxService gitHubBlogOutboxService;
 
-    @GetMapping("/{postId}/sync")
-    public ResponseEntity<GitHubPostSyncResponse> status(@PathVariable Long postId,
-            @AuthenticationPrincipal User user) {
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(outbox.statusFor(postId, user.getId()));
-    }
+  @GetMapping("/{postId}/sync")
+  public ResponseEntity<GitHubPostSyncResponse> status(
+      @PathVariable Long postId, @AuthenticationPrincipal User user) {
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(gitHubBlogOutboxService.statusFor(postId, user.getId()));
+  }
 }

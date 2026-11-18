@@ -21,11 +21,11 @@ import org.springframework.web.bind.annotation.RestController;
 @SecurityRequirement(name = "cookieAuth")
 public class AdminController {
 
-    private final UserService userService;
+  private final UserService userService;
 
-    @GetMapping("/me")
-    @Operation(summary = "로그인한 관리자 조회")
-    public UserProfileResponse me(@AuthenticationPrincipal User user) {
-        return userService.getProfile(user);
-    }
+  @GetMapping("/me")
+  @Operation(summary = "로그인한 관리자 조회")
+  public UserProfileResponse me(@AuthenticationPrincipal User user) {
+    return userService.getProfile(user);
+  }
 }

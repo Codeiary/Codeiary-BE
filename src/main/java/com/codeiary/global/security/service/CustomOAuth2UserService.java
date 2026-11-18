@@ -14,15 +14,20 @@ import org.springframework.stereotype.Component;
 @Component
 public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
-    @Override
-    @LogExecution
-    public OAuth2User loadUser(OAuth2UserRequest request) throws OAuth2AuthenticationException {
-        OAuth2User user = super.loadUser(request);
-        OAuth2Response profile = OAuth2ResponseFactory.from(
-                request.getClientRegistration().getRegistrationId(), user);
-        AuthInfo authInfo = new AuthInfo(
-                profile.getProvider(), profile.getSubject(), profile.getEmail(), profile.getName(),
-                profile.isEmailVerified(), profile.isEmailAuthoritative());
-        return new CustomOAuth2User(user, authInfo);
-    }
+  @Override
+  @LogExecution
+  public OAuth2User loadUser(OAuth2UserRequest request) throws OAuth2AuthenticationException {
+    OAuth2User user = super.loadUser(request);
+    OAuth2Response profile =
+        OAuth2ResponseFactory.from(request.getClientRegistration().getRegistrationId(), user);
+    AuthInfo authInfo =
+        new AuthInfo(
+            profile.getProvider(),
+            profile.getSubject(),
+            profile.getEmail(),
+            profile.getName(),
+            profile.isEmailVerified(),
+            profile.isEmailAuthoritative());
+    return new CustomOAuth2User(user, authInfo);
+  }
 }

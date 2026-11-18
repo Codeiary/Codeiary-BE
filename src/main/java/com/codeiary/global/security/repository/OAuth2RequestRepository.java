@@ -8,29 +8,35 @@ import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequ
 import org.springframework.stereotype.Component;
 
 @Component
-public class OAuth2RequestRepository implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
-    public static final String COMPLETED_REQUEST = OAuth2RequestRepository.class.getName() + ".completed";
-    private final HttpSessionOAuth2AuthorizationRequestRepository delegate =
-            new HttpSessionOAuth2AuthorizationRequestRepository();
+public class OAuth2RequestRepository
+    implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
+  public static final String COMPLETED_REQUEST =
+      OAuth2RequestRepository.class.getName() + ".completed";
+  private final HttpSessionOAuth2AuthorizationRequestRepository delegate =
+      new HttpSessionOAuth2AuthorizationRequestRepository();
 
-    @Override
-    public OAuth2AuthorizationRequest loadAuthorizationRequest(HttpServletRequest request) {
-        return delegate.loadAuthorizationRequest(request);
-    }
+  @Override
+  public OAuth2AuthorizationRequest loadAuthorizationRequest(
+      HttpServletRequest httpServletRequest) {
+    return delegate.loadAuthorizationRequest(httpServletRequest);
+  }
 
-    @Override
-    public void saveAuthorizationRequest(OAuth2AuthorizationRequest authorization,
-            HttpServletRequest request, HttpServletResponse response) {
-        delegate.saveAuthorizationRequest(authorization, request, response);
-    }
+  @Override
+  public void saveAuthorizationRequest(
+      OAuth2AuthorizationRequest authorization,
+      HttpServletRequest httpServletRequest,
+      HttpServletResponse httpServletResponse) {
+    delegate.saveAuthorizationRequest(authorization, httpServletRequest, httpServletResponse);
+  }
 
-    @Override
-    public OAuth2AuthorizationRequest removeAuthorizationRequest(HttpServletRequest request,
-            HttpServletResponse response) {
-        var authorization = delegate.removeAuthorizationRequest(request, response);
-        if (authorization != null) {
-            request.setAttribute(COMPLETED_REQUEST, authorization);
-        }
-        return authorization;
+  @Override
+  public OAuth2AuthorizationRequest removeAuthorizationRequest(
+      HttpServletRequest httpServletRequest, HttpServletResponse httpServletResponse) {
+    var authorization =
+        delegate.removeAuthorizationRequest(httpServletRequest, httpServletResponse);
+    if (authorization != null) {
+      httpServletRequest.setAttribute(COMPLETED_REQUEST, authorization);
     }
+    return authorization;
+  }
 }

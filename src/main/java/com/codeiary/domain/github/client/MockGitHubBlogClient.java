@@ -13,23 +13,25 @@ import org.springframework.stereotype.Component;
 @Profile("loadtest")
 @LogExecution
 public class MockGitHubBlogClient implements GitHubBlogWriter {
-    private final Duration delay;
+  private final Duration delay;
 
-    public MockGitHubBlogClient(@Value("${github.mock-delay:500ms}") Duration delay, Environment environment) {
-        if (environment.acceptsProfiles(Profiles.of("prod"))) {
-            throw new IllegalStateException("GitHub mock cannot run with the prod profile");
-        }
-        if (delay.isNegative()) throw new IllegalArgumentException("GitHub mock delay must not be negative");
-        this.delay = delay;
+  public MockGitHubBlogClient(
+      @Value("${github.mock-delay:500ms}") Duration delay, Environment environment) {
+    if (environment.acceptsProfiles(Profiles.of("prod"))) {
+      throw new IllegalStateException("GitHub mock cannot run with the prod profile");
     }
+    if (delay.isNegative())
+      throw new IllegalArgumentException("GitHub mock delay must not be negative");
+    this.delay = delay;
+  }
 
-    @Override
-    public void sync(GitHubBlogSyncContent content) {
-        try {
-            Thread.sleep(delay);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("GitHub mock interrupted");
-        }
+  @Override
+  public void sync(GitHubBlogSyncContent gitHubBlogSyncContent) {
+    try {
+      Thread.sleep(delay);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("GitHub mock interrupted");
     }
+  }
 }

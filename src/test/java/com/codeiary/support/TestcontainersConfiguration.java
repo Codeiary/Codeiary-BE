@@ -10,20 +10,19 @@ import org.testcontainers.utility.DockerImageName;
 @TestConfiguration(proxyBeanMethods = false)
 public class TestcontainersConfiguration {
 
-    @Bean
-    @ServiceConnection
-    @SuppressWarnings("resource") // Spring Boot owns the container's start/stop lifecycle.
-    PostgreSQLContainer postgresContainer() {
-        var container = new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine"));
-        container.withDatabaseName("codeiary_test");
-        return container;
-    }
+  @Bean
+  @ServiceConnection
+  @SuppressWarnings("resource") // Spring Boot owns the container's start/stop lifecycle.
+  PostgreSQLContainer postgresContainer() {
+    var container = new PostgreSQLContainer(DockerImageName.parse("postgres:17-alpine"));
+    container.withDatabaseName("codeiary_test");
+    return container;
+  }
 
-    @Bean
-    @ServiceConnection(name = "redis")
-    @SuppressWarnings("resource") // Spring Boot owns the container's start/stop lifecycle.
-    GenericContainer<?> redisContainer() {
-        return new GenericContainer<>(DockerImageName.parse("redis:7-alpine"))
-                .withExposedPorts(6379);
-    }
+  @Bean
+  @ServiceConnection(name = "redis")
+  @SuppressWarnings("resource") // Spring Boot owns the container's start/stop lifecycle.
+  GenericContainer<?> redisContainer() {
+    return new GenericContainer<>(DockerImageName.parse("redis:7-alpine")).withExposedPorts(6379);
+  }
 }

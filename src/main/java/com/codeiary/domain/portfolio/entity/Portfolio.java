@@ -20,11 +20,11 @@ import jakarta.persistence.Table;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import org.hibernate.annotations.BatchSize;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 @Entity
 @Table(name = "portfolio")
@@ -32,92 +32,106 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Portfolio extends TimeBaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(nullable = false, length = 200)
-    private String title;
+  @Column(nullable = false, length = 200)
+  private String title;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 10)
-    private TextAlignment titleAlign;
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 10)
+  private TextAlignment titleAlign;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "author_id", nullable = false)
-    private User author;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "author_id", nullable = false)
+  private User author;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "default_font_id", nullable = false)
-    private Font defaultFont;
+  @ManyToOne(fetch = FetchType.LAZY, optional = false)
+  @JoinColumn(name = "default_font_id", nullable = false)
+  private Font defaultFont;
 
-    @Column(length = 2048)
-    private String representativeImageUrl;
+  @Column(length = 2048)
+  private String representativeImageUrl;
 
-    @Column(name = "is_public", nullable = false)
-    private boolean publicPortfolio;
+  @Column(name = "is_public", nullable = false)
+  private boolean publicPortfolio;
 
-    @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("sortOrder ASC")
-    private List<PortfolioBlock> blocks = new ArrayList<>();
+  @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true)
+  @OrderBy("sortOrder ASC")
+  private List<PortfolioBlock> blocks = new ArrayList<>();
 
-    @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true)
-    @OrderBy("startOffset ASC")
-    @BatchSize(size = 100)
-    private List<PortfolioTitleStyle> titleStyles = new ArrayList<>();
+  @OneToMany(mappedBy = "portfolio", cascade = CascadeType.ALL, orphanRemoval = true)
+  @OrderBy("startOffset ASC")
+  @BatchSize(size = 100)
+  private List<PortfolioTitleStyle> titleStyles = new ArrayList<>();
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private Portfolio(User author, Font defaultFont, String title, TextAlignment titleAlign,
-                       String representativeImageUrl, boolean publicPortfolio) {
-        this.author = author;
-        this.defaultFont = defaultFont;
-        this.title = title;
-        this.titleAlign = titleAlign;
-        this.representativeImageUrl = representativeImageUrl;
-        this.publicPortfolio = publicPortfolio;
-    }
+  @Builder(access = AccessLevel.PRIVATE)
+  private Portfolio(
+      User author,
+      Font defaultFont,
+      String title,
+      TextAlignment titleAlign,
+      String representativeImageUrl,
+      boolean publicPortfolio) {
+    this.author = author;
+    this.defaultFont = defaultFont;
+    this.title = title;
+    this.titleAlign = titleAlign;
+    this.representativeImageUrl = representativeImageUrl;
+    this.publicPortfolio = publicPortfolio;
+  }
 
-    public static Portfolio create(User author, Font defaultFont, String title, TextAlignment titleAlign,
-                                   String representativeImageUrl, boolean publicPortfolio) {
-        return Portfolio.builder()
-                .author(author)
-                .defaultFont(defaultFont)
-                .title(title)
-                .titleAlign(titleAlign)
-                .representativeImageUrl(representativeImageUrl)
-                .publicPortfolio(publicPortfolio)
-                .build();
-    }
+  public static Portfolio create(
+      User user,
+      Font font,
+      String title,
+      TextAlignment textAlignment,
+      String representativeImageUrl,
+      boolean publicPortfolio) {
+    return Portfolio.builder()
+        .author(user)
+        .defaultFont(font)
+        .title(title)
+        .titleAlign(textAlignment)
+        .representativeImageUrl(representativeImageUrl)
+        .publicPortfolio(publicPortfolio)
+        .build();
+  }
 
-    public void update(Font defaultFont, String title, TextAlignment titleAlign,
-                       String representativeImageUrl, boolean publicPortfolio) {
-        this.defaultFont = defaultFont;
-        this.title = title;
-        this.titleAlign = titleAlign;
-        this.representativeImageUrl = representativeImageUrl;
-        this.publicPortfolio = publicPortfolio;
-        blocks.clear();
-        titleStyles.clear();
-        markModified();
-    }
+  public void update(
+      Font font,
+      String title,
+      TextAlignment textAlignment,
+      String representativeImageUrl,
+      boolean publicPortfolio) {
+    this.defaultFont = font;
+    this.title = title;
+    this.titleAlign = textAlignment;
+    this.representativeImageUrl = representativeImageUrl;
+    this.publicPortfolio = publicPortfolio;
+    blocks.clear();
+    titleStyles.clear();
+    markModified();
+  }
 
-    public List<PortfolioBlock> getBlocks() {
-        return Collections.unmodifiableList(blocks);
-    }
+  public List<PortfolioBlock> getBlocks() {
+    return Collections.unmodifiableList(blocks);
+  }
 
-    void addBlock(PortfolioBlock block) {
-        blocks.add(block);
-    }
+  void addBlock(PortfolioBlock portfolioBlock) {
+    blocks.add(portfolioBlock);
+  }
 
-    public List<PortfolioTitleStyle> getTitleStyles() {
-        return Collections.unmodifiableList(titleStyles);
-    }
+  public List<PortfolioTitleStyle> getTitleStyles() {
+    return Collections.unmodifiableList(titleStyles);
+  }
 
-    void addTitleStyle(PortfolioTitleStyle style) {
-        titleStyles.add(style);
-    }
+  void addTitleStyle(PortfolioTitleStyle portfolioTitleStyle) {
+    titleStyles.add(portfolioTitleStyle);
+  }
 
-    public boolean isWrittenBy(User user) {
-        return user != null && author.getId().equals(user.getId());
-    }
+  public boolean isWrittenBy(User user) {
+    return user != null && author.getId().equals(user.getId());
+  }
 }

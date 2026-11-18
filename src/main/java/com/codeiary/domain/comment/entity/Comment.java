@@ -25,75 +25,80 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Comment extends TimeBaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "target_type", nullable = false, length = 30)
-    private CommentTargetType targetType;
+  @Enumerated(EnumType.STRING)
+  @Column(name = "target_type", nullable = false, length = 30)
+  private CommentTargetType targetType;
 
-    @Column(name = "target_id", nullable = false)
-    private Long targetId;
+  @Column(name = "target_id", nullable = false)
+  private Long targetId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "author_id")
-    private User author;
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "author_id")
+  private User author;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parent_id")
-    private Comment parent;
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "parent_id")
+  private Comment parent;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
-    private String content;
+  @Column(nullable = false, columnDefinition = "TEXT")
+  private String content;
 
-    @Column(name = "deleted_at")
-    private LocalDateTime deletedAt;
+  @Column(name = "deleted_at")
+  private LocalDateTime deletedAt;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private Comment(CommentTargetType targetType, Long targetId, User author, Comment parent, String content) {
-        this.targetType = targetType;
-        this.targetId = targetId;
-        this.author = author;
-        this.parent = parent;
-        this.content = content;
+  @Builder(access = AccessLevel.PRIVATE)
+  private Comment(
+      CommentTargetType targetType, Long targetId, User author, Comment parent, String content) {
+    this.targetType = targetType;
+    this.targetId = targetId;
+    this.author = author;
+    this.parent = parent;
+    this.content = content;
+  }
+
+  public static Comment create(
+      CommentTargetType commentTargetType,
+      Long targetId,
+      User user,
+      Comment comment,
+      String content) {
+    return Comment.builder()
+        .targetType(commentTargetType)
+        .targetId(targetId)
+        .author(user)
+        .parent(comment)
+        .content(content)
+        .build();
+  }
+
+  public boolean isDeleted() {
+    return deletedAt != null;
+  }
+
+  public boolean isRoot() {
+    return parent == null;
+  }
+
+  public boolean isWrittenBy(User user) {
+    return user != null && author != null && author.getId().equals(user.getId());
+  }
+
+  public void update(String content) {
+    this.content = content;
+    markModified();
+  }
+
+  public void delete() {
+    if (isDeleted()) {
+      return;
     }
-
-    public static Comment create(CommentTargetType targetType, Long targetId, User author,
-                                 Comment parent, String content) {
-        return Comment.builder()
-                .targetType(targetType)
-                .targetId(targetId)
-                .author(author)
-                .parent(parent)
-                .content(content)
-                .build();
-    }
-
-    public boolean isDeleted() {
-        return deletedAt != null;
-    }
-
-    public boolean isRoot() {
-        return parent == null;
-    }
-
-    public boolean isWrittenBy(User user) {
-        return user != null && author != null && author.getId().equals(user.getId());
-    }
-
-    public void update(String content) {
-        this.content = content;
-        markModified();
-    }
-
-    public void delete() {
-        if (isDeleted()) {
-            return;
-        }
-        this.content = "";
-        this.author = null;
-        this.deletedAt = LocalDateTime.now();
-        markModified();
-    }
+    this.content = "";
+    this.author = null;
+    this.deletedAt = LocalDateTime.now();
+    markModified();
+  }
 }

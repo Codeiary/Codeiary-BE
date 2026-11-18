@@ -4,8 +4,8 @@ import com.codeiary.domain.comment.dto.request.CommentCreateRequest;
 import com.codeiary.domain.comment.dto.request.CommentUpdateRequest;
 import com.codeiary.domain.comment.dto.response.CommentResponse;
 import com.codeiary.domain.comment.service.CommentService;
-import com.codeiary.global.logging.LogExecution;
 import com.codeiary.domain.user.entity.User;
+import com.codeiary.global.logging.LogExecution;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,51 +31,44 @@ import org.springframework.web.bind.annotation.RestController;
 @Tag(name = "댓글")
 public class CommentController {
 
-    private final CommentService commentService;
+  private final CommentService commentService;
 
-    @GetMapping
-    @Operation(summary = "게시글 댓글 조회")
-    public List<CommentResponse> list(
-            @PathVariable Long postId,
-            @AuthenticationPrincipal User viewer
-    ) {
-        return commentService.getComments(postId, viewer);
-    }
+  @GetMapping
+  @Operation(summary = "게시글 댓글 조회")
+  public List<CommentResponse> list(@PathVariable Long postId, @AuthenticationPrincipal User user) {
+    return commentService.getComments(postId, user);
+  }
 
-    @PostMapping
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "댓글 작성")
-    public ResponseEntity<CommentResponse> create(
-            @PathVariable Long postId,
-            @AuthenticationPrincipal User author,
-            @Valid @RequestBody CommentCreateRequest request
-    ) {
-        CommentResponse response = commentService.create(postId, author, request);
-        return ResponseEntity.created(URI.create("/posts/" + postId + "/comments/" + response.id()))
-                .body(response);
-    }
+  @PostMapping
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "댓글 작성")
+  public ResponseEntity<CommentResponse> create(
+      @PathVariable Long postId,
+      @AuthenticationPrincipal User user,
+      @Valid @RequestBody CommentCreateRequest commentCreateRequest) {
+    CommentResponse commentResponse = commentService.create(postId, user, commentCreateRequest);
+    return ResponseEntity.created(
+            URI.create("/posts/" + postId + "/comments/" + commentResponse.id()))
+        .body(commentResponse);
+  }
 
-    @PutMapping("/{commentId}")
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "댓글 수정")
-    public CommentResponse update(
-            @PathVariable Long postId,
-            @PathVariable Long commentId,
-            @AuthenticationPrincipal User author,
-            @Valid @RequestBody CommentUpdateRequest request
-    ) {
-        return commentService.update(postId, commentId, author, request);
-    }
+  @PutMapping("/{commentId}")
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "댓글 수정")
+  public CommentResponse update(
+      @PathVariable Long postId,
+      @PathVariable Long commentId,
+      @AuthenticationPrincipal User user,
+      @Valid @RequestBody CommentUpdateRequest commentUpdateRequest) {
+    return commentService.update(postId, commentId, user, commentUpdateRequest);
+  }
 
-    @DeleteMapping("/{commentId}")
-    @SecurityRequirement(name = "cookieAuth")
-    @Operation(summary = "댓글 삭제")
-    public ResponseEntity<Void> delete(
-            @PathVariable Long postId,
-            @PathVariable Long commentId,
-            @AuthenticationPrincipal User author
-    ) {
-        commentService.delete(postId, commentId, author);
-        return ResponseEntity.noContent().build();
-    }
+  @DeleteMapping("/{commentId}")
+  @SecurityRequirement(name = "cookieAuth")
+  @Operation(summary = "댓글 삭제")
+  public ResponseEntity<Void> delete(
+      @PathVariable Long postId, @PathVariable Long commentId, @AuthenticationPrincipal User user) {
+    commentService.delete(postId, commentId, user);
+    return ResponseEntity.noContent().build();
+  }
 }

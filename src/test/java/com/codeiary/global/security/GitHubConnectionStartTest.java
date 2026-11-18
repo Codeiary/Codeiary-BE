@@ -1,280 +1,344 @@
 package com.codeiary.global.security;
 
-import com.codeiary.domain.github.dto.GitHubLinkContext;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.codeiary.domain.auth.service.TokenService;
 import com.codeiary.domain.blog.fixture.BlogPostFixture;
 import com.codeiary.domain.blog.service.BlogPostService;
+import com.codeiary.domain.github.dto.GitHubLinkContext;
 import com.codeiary.domain.github.repository.GitHubConnectionRepository;
-import com.codeiary.global.security.handler.CustomOauth2SuccessHandler;
-import com.codeiary.global.security.repository.OAuth2RequestRepository;
-import com.codeiary.global.security.dto.adapter.OAuth2ResponseFactory;
-import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
-import com.codeiary.global.security.dto.AuthInfo;
-import com.codeiary.global.exception.RestApiException;
 import com.codeiary.domain.github.service.GitHubConnectionService;
 import com.codeiary.domain.user.entity.User;
-import java.time.Instant;
-import java.time.Duration;
-import java.util.Map;
-import java.util.List;
-import org.springframework.mock.web.MockHttpServletRequest;
-import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
-import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.codeiary.domain.user.entity.enums.Role;
 import com.codeiary.domain.user.fixture.UserFixture;
 import com.codeiary.domain.user.repository.UserRepository;
-import com.codeiary.domain.auth.service.TokenService;
+import com.codeiary.global.exception.RestApiException;
+import com.codeiary.global.security.dto.AuthInfo;
+import com.codeiary.global.security.dto.adapter.OAuth2ResponseFactory;
+import com.codeiary.global.security.dto.oauth2user.CustomOAuth2User;
+import com.codeiary.global.security.handler.CustomOauth2SuccessHandler;
+import com.codeiary.global.security.repository.OAuth2RequestRepository;
 import com.codeiary.support.IntegrationTestSupport;
 import jakarta.servlet.http.Cookie;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository;
+import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
+import org.springframework.security.oauth2.core.user.DefaultOAuth2User;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @AutoConfigureMockMvc
 @Transactional
 class GitHubConnectionStartTest extends IntegrationTestSupport {
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
-    com.codeiary.domain.github.service.GitHubRepositoryService githubRepositories;
-    @Autowired MockMvc mvc;
-    @Autowired UserRepository users;
-    @Autowired TokenService tokenService;
-    @Autowired OAuth2RequestRepository authorizationRequests;
-    @Autowired CustomOauth2SuccessHandler successHandler;
-    @Autowired GitHubConnectionRepository connections;
-    @Autowired GitHubConnectionService githubConnections;
-    @Autowired BlogPostService blogPosts;
+  @org.springframework.test.context.bean.override.mockito.MockitoBean
+  com.codeiary.domain.github.service.GitHubRepositoryService githubRepositories;
 
-    @DisplayName("동기화 상태를 게시글 작성자에게만 보여줄 수 있다.")
-    @Test
-    void syncStatusIsVisibleOnlyToPostAuthor() throws Exception {
-        var author = users.saveAndFlush(UserFixture.create(Role.USER));
-        var other = users.saveAndFlush(User.create("sync-viewer@example.com", "방문자", Role.USER));
-        var post = blogPosts.create(author, BlogPostFixture.request());
-        var path = "/github/posts/" + post.id() + "/sync";
+  @Autowired MockMvc mvc;
+  @Autowired UserRepository users;
+  @Autowired TokenService tokenService;
+  @Autowired OAuth2RequestRepository authorizationRequests;
+  @Autowired CustomOauth2SuccessHandler successHandler;
+  @Autowired GitHubConnectionRepository connections;
+  @Autowired GitHubConnectionService githubConnections;
+  @Autowired BlogPostService blogPosts;
 
-        mvc.perform(get(path)).andExpect(status().isUnauthorized());
-        mvc.perform(get(path).cookie(new Cookie("access_token",
-                        tokenService.login(other.getEmail()).accessToken())))
-                .andExpect(status().isNotFound());
-        mvc.perform(get(path).cookie(new Cookie("access_token",
-                        tokenService.login(author.getEmail()).accessToken())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.connected").value(false))
-                .andExpect(jsonPath("$.status").isEmpty());
-    }
+  @DisplayName("동기화 상태를 게시글 작성자에게만 보여줄 수 있다.")
+  @Test
+  void syncStatusIsVisibleOnlyToPostAuthor() throws Exception {
+    var author = users.saveAndFlush(UserFixture.create(Role.USER));
+    var other = users.saveAndFlush(User.create("sync-viewer@example.com", "방문자", Role.USER));
+    var post = blogPosts.create(author, BlogPostFixture.request());
+    var path = "/github/posts/" + post.id() + "/sync";
 
-    @DisplayName("익명 사용자와 온보딩 대기 사용자의 GitHub 연동을 거절할 수 있다.")
-    @Test
-    void rejectAnonymousAndPendingUsers() throws Exception {
-        mvc.perform(get("/oauth2/authorization/github"))
-                .andExpect(status().isUnauthorized());
-        mvc.perform(get("/oauth2/authorization/github").cookie(cookie(Role.PENDING)))
-                .andExpect(status().isForbidden());
-    }
+    mvc.perform(get(path)).andExpect(status().isUnauthorized());
+    mvc.perform(
+            get(path)
+                .cookie(
+                    new Cookie("access_token", tokenService.login(other.getEmail()).accessToken())))
+        .andExpect(status().isNotFound());
+    mvc.perform(
+            get(path)
+                .cookie(
+                    new Cookie(
+                        "access_token", tokenService.login(author.getEmail()).accessToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.connected").value(false))
+        .andExpect(jsonPath("$.status").isEmpty());
+  }
 
-    @DisplayName("OAuth 요청 상태에 연동 사용자를 보존할 수 있다.")
-    @Test
-    void preserveUserInStateBoundOAuthRequest() throws Exception {
-        var user = users.saveAndFlush(UserFixture.create(Role.USER));
-        var token = tokenService.login(user.getEmail()).accessToken();
-        var result = mvc.perform(get("/oauth2/authorization/github")
-                        .cookie(new Cookie("access_token", token))
-                        .param("userId", "999999"))
-                .andExpect(status().is3xxRedirection())
-                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string(
-                        "Location", org.hamcrest.Matchers.allOf(
-                                org.hamcrest.Matchers.startsWith("https://github.com/login/oauth/authorize?"),
-                                org.hamcrest.Matchers.containsString("prompt=select_account"))))
-                .andReturn();
-        MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
-        assertThat(session).isNotNull();
-        var authorizationRepository = new HttpSessionOAuth2AuthorizationRequestRepository();
-        // Load through the same repository used by Spring's callback filter.
-        String state = java.util.Collections.list(session.getAttributeNames()).stream()
-                .map(session::getAttribute)
-                .filter(org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest.class::isInstance)
-                .map(org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest.class::cast)
-                .findFirst().orElseThrow().getState();
-        var callback = get("/login/oauth2/code/github").session(session).param("state", state)
-                .buildRequest(result.getRequest().getServletContext());
-        var saved = authorizationRepository.loadAuthorizationRequest(callback);
-        var context = saved.<GitHubLinkContext>getAttribute(GitHubLinkContext.ATTRIBUTE);
-        assertThat(context.userId()).isEqualTo(user.getId());
-        assertThat(saved.getAttribute("registration_id").toString()).isEqualTo("github");
-        callback.setParameter("state", "different-state");
-        assertThat(authorizationRepository.loadAuthorizationRequest(callback)).isNull();
-    }
+  @DisplayName("익명 사용자와 온보딩 대기 사용자의 GitHub 연동을 거절할 수 있다.")
+  @Test
+  void rejectAnonymousAndPendingUsers() throws Exception {
+    mvc.perform(get("/oauth2/authorization/github")).andExpect(status().isUnauthorized());
+    mvc.perform(get("/oauth2/authorization/github").cookie(cookie(Role.PENDING)))
+        .andExpect(status().isForbidden());
+  }
 
-    @DisplayName("Google 로그인 시작 요청을 유지할 수 있다.")
-    @Test
-    void preserveGoogleAuthorizationStart() throws Exception {
-        mvc.perform(get("/oauth2/authorization/google"))
-                .andExpect(status().is3xxRedirection());
-    }
+  @DisplayName("OAuth 요청 상태에 연동 사용자를 보존할 수 있다.")
+  @Test
+  void preserveUserInStateBoundOAuthRequest() throws Exception {
+    var user = users.saveAndFlush(UserFixture.create(Role.USER));
+    var token = tokenService.login(user.getEmail()).accessToken();
+    var result =
+        mvc.perform(
+                get("/oauth2/authorization/github")
+                    .cookie(new Cookie("access_token", token))
+                    .param("userId", "999999"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(
+                org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                    .string(
+                        "Location",
+                        org.hamcrest.Matchers.allOf(
+                            org.hamcrest.Matchers.startsWith(
+                                "https://github.com/login/oauth/authorize?"),
+                            org.hamcrest.Matchers.containsString("prompt=select_account"))))
+            .andReturn();
+    MockHttpSession mockHttpSession = (MockHttpSession) result.getRequest().getSession(false);
+    assertThat(mockHttpSession).isNotNull();
+    var authorizationRepository = new HttpSessionOAuth2AuthorizationRequestRepository();
+    // Load through the same repository used by Spring's callback filter.
+    String state =
+        java.util.Collections.list(mockHttpSession.getAttributeNames()).stream()
+            .map(mockHttpSession::getAttribute)
+            .filter(
+                org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest.class
+                    ::isInstance)
+            .map(
+                org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest.class
+                    ::cast)
+            .findFirst()
+            .orElseThrow()
+            .getState();
+    var callback =
+        get("/login/oauth2/code/github")
+            .session(mockHttpSession)
+            .param("state", state)
+            .buildRequest(result.getRequest().getServletContext());
+    var saved = authorizationRepository.loadAuthorizationRequest(callback);
+    var context = saved.<GitHubLinkContext>getAttribute(GitHubLinkContext.ATTRIBUTE);
+    assertThat(context.userId()).isEqualTo(user.getId());
+    assertThat(saved.getAttribute("registration_id").toString()).isEqualTo("github");
+    callback.setParameter("state", "different-state");
+    assertThat(authorizationRepository.loadAuthorizationRequest(callback)).isNull();
+  }
 
-    @DisplayName("로그인 토큰을 새로 발급하지 않고 원래 사용자에게 GitHub 계정을 연결할 수 있다.")
-    @Test
-    void connectCallbackToOriginalUserWithoutIssuingLoginTokens() throws Exception {
-        var user = users.saveAndFlush(UserFixture.create(Role.USER));
-        long userCount = users.count();
-        var authorization = authorization(new GitHubLinkContext(user.getId(), Instant.now()));
-        var callback = new MockHttpServletRequest();
-        var response = new MockHttpServletResponse();
-        authorizationRequests.saveAuthorizationRequest(authorization, callback, response);
-        callback.setParameter("state", authorization.getState());
-        assertThat(authorizationRequests.removeAuthorizationRequest(callback, response)).isNotNull();
-        assertThat(authorizationRequests.removeAuthorizationRequest(callback, response)).isNull();
-        successHandler.onAuthenticationSuccess(callback, response, githubAuthentication());
-        var saved = connections.findByUserId(user.getId()).orElseThrow();
-        assertThat(saved.getGithubUserId()).isEqualTo(123L);
-        assertThat(saved.getGithubLogin()).isEqualTo("octocat");
-        org.mockito.Mockito.verify(githubRepositories).prepare(user.getId());
-        assertThat(response.getCookies()).isEmpty();
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/auth/callback");
-        assertThat(users.count()).isEqualTo(userCount);
-    }
+  @DisplayName("Google 로그인 시작 요청을 유지할 수 있다.")
+  @Test
+  void preserveGoogleAuthorizationStart() throws Exception {
+    mvc.perform(get("/oauth2/authorization/google")).andExpect(status().is3xxRedirection());
+  }
 
-    @DisplayName("성공 로직을 옮긴 뒤에도 Google 로그인을 완료할 수 있다.")
-    @Test
-    void preserveGoogleLoginAfterMovingSuccessLogic() throws Exception {
-        var attributes = Map.<String, Object>of("sub", "google-subject");
-        var principal = new CustomOAuth2User(new DefaultOAuth2User(List.of(), attributes, "sub"),
-                new AuthInfo(com.codeiary.domain.user.entity.enums.OAuthProvider.GOOGLE,
-                        "google-subject", "google-regression@gmail.com", "기록자", true, true));
-        var response = new MockHttpServletResponse();
-        successHandler.onAuthenticationSuccess(new MockHttpServletRequest(), response,
-                UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/auth/callback");
-        var access = response.getCookie("access_token");
-        assertThat(access).isNotNull();
-        assertThat(response.getCookie("refresh_token")).isNotNull();
-        assertThat(tokenService.authenticate(access.getValue()).getEmail()).isEqualTo("google-regression@gmail.com");
-        assertThat(connections.count()).isZero();
-    }
+  @DisplayName("로그인 토큰을 새로 발급하지 않고 원래 사용자에게 GitHub 계정을 연결할 수 있다.")
+  @Test
+  void connectCallbackToOriginalUserWithoutIssuingLoginTokens() throws Exception {
+    var user = users.saveAndFlush(UserFixture.create(Role.USER));
+    long userCount = users.count();
+    var authorization = authorization(new GitHubLinkContext(user.getId(), Instant.now()));
+    var callback = new MockHttpServletRequest();
+    var response = new MockHttpServletResponse();
+    authorizationRequests.saveAuthorizationRequest(authorization, callback, response);
+    callback.setParameter("state", authorization.getState());
+    assertThat(authorizationRequests.removeAuthorizationRequest(callback, response)).isNotNull();
+    assertThat(authorizationRequests.removeAuthorizationRequest(callback, response)).isNull();
+    successHandler.onAuthenticationSuccess(callback, response, githubAuthentication());
+    var saved = connections.findByUserId(user.getId()).orElseThrow();
+    assertThat(saved.getGithubUserId()).isEqualTo(123L);
+    assertThat(saved.getGithubLogin()).isEqualTo("octocat");
+    org.mockito.Mockito.verify(githubRepositories).prepare(user.getId());
+    assertThat(response.getCookies()).isEmpty();
+    assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/auth/callback");
+    assertThat(users.count()).isEqualTo(userCount);
+  }
 
-    @DisplayName("저장소 생성이 실패해도 계정 연결을 유지하고 저장소 오류를 반환할 수 있다.")
-    @Test
-    void repositoryCreationFailureKeepsLinkedAccountAndReturnsRepositoryError() throws Exception {
-        var user = users.saveAndFlush(UserFixture.create(Role.USER));
-        var callback = new MockHttpServletRequest();
-        callback.setAttribute(OAuth2RequestRepository.COMPLETED_REQUEST,
-                authorization(new GitHubLinkContext(user.getId(), Instant.now())));
-        org.mockito.Mockito.doThrow(new RestApiException(
-                com.codeiary.domain.github.exception.GitHubErrorCode.GITHUB_APP_INSTALLATION_REQUIRED))
-                .when(githubRepositories).prepare(user.getId());
-        var response = new MockHttpServletResponse();
-        successHandler.onAuthenticationSuccess(callback, response, githubAuthentication());
-        assertThat(connections.findByUserId(user.getId())).isPresent();
-        assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/auth/callback?error=github_repository");
-        assertThat(response.getCookies()).isEmpty();
-    }
+  @DisplayName("성공 로직을 옮긴 뒤에도 Google 로그인을 완료할 수 있다.")
+  @Test
+  void preserveGoogleLoginAfterMovingSuccessLogic() throws Exception {
+    var attributes = Map.<String, Object>of("sub", "google-subject");
+    var principal =
+        new CustomOAuth2User(
+            new DefaultOAuth2User(List.of(), attributes, "sub"),
+            new AuthInfo(
+                com.codeiary.domain.user.entity.enums.OAuthProvider.GOOGLE,
+                "google-subject",
+                "google-regression@gmail.com",
+                "기록자",
+                true,
+                true));
+    var response = new MockHttpServletResponse();
+    successHandler.onAuthenticationSuccess(
+        new MockHttpServletRequest(),
+        response,
+        UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of()));
+    assertThat(response.getRedirectedUrl()).isEqualTo("http://localhost:5173/auth/callback");
+    var access = response.getCookie("access_token");
+    assertThat(access).isNotNull();
+    assertThat(response.getCookie("refresh_token")).isNotNull();
+    assertThat(tokenService.authenticate(access.getValue()).getEmail())
+        .isEqualTo("google-regression@gmail.com");
+    assertThat(connections.count()).isZero();
+  }
 
-    @DisplayName("현재 사용자의 GitHub 연결만 조회할 수 있다.")
-    @Test
-    void returnOnlyCurrentUsersConnection() throws Exception {
-        mvc.perform(get("/github/connection")).andExpect(status().isUnauthorized());
-        var first = users.saveAndFlush(UserFixture.create(Role.USER));
-        var second = users.saveAndFlush(User.create("second@example.com", "두번째", Role.USER));
-        var profile = ((CustomOAuth2User) githubAuthentication().getPrincipal()).getAuthInfo();
-        githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
-        mvc.perform(get("/github/connection").cookie(new Cookie("access_token",
-                        tokenService.login(first.getEmail()).accessToken())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.connected").value(true))
-                .andExpect(jsonPath("$.login").value("octocat"));
-        mvc.perform(get("/github/connection").cookie(new Cookie("access_token",
-                        tokenService.login(second.getEmail()).accessToken())))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.connected").value(false))
-                .andExpect(jsonPath("$.login").isEmpty());
-    }
+  @DisplayName("저장소 생성이 실패해도 계정 연결을 유지하고 저장소 오류를 반환할 수 있다.")
+  @Test
+  void repositoryCreationFailureKeepsLinkedAccountAndReturnsRepositoryError() throws Exception {
+    var user = users.saveAndFlush(UserFixture.create(Role.USER));
+    var callback = new MockHttpServletRequest();
+    callback.setAttribute(
+        OAuth2RequestRepository.COMPLETED_REQUEST,
+        authorization(new GitHubLinkContext(user.getId(), Instant.now())));
+    org.mockito.Mockito.doThrow(
+            new RestApiException(
+                com.codeiary.domain.github.exception.GitHubErrorCode
+                    .GITHUB_APP_INSTALLATION_REQUIRED))
+        .when(githubRepositories)
+        .prepare(user.getId());
+    var response = new MockHttpServletResponse();
+    successHandler.onAuthenticationSuccess(callback, response, githubAuthentication());
+    assertThat(connections.findByUserId(user.getId())).isPresent();
+    assertThat(response.getRedirectedUrl())
+        .isEqualTo("http://localhost:5173/auth/callback?error=github_repository");
+    assertThat(response.getCookies()).isEmpty();
+  }
 
-    @DisplayName("현재 사용자의 연결만 해제하고 다시 연동할 수 있다.")
-    @Test
-    void disconnectOnlyCurrentUsersConnectionAndAllowRetry() throws Exception {
-        mvc.perform(delete("/github/connection")).andExpect(status().isUnauthorized());
-        var first = users.saveAndFlush(UserFixture.create(Role.USER));
-        var second = users.saveAndFlush(User.create("second@example.com", "두번째", Role.USER));
-        var profile = ((CustomOAuth2User) githubAuthentication().getPrincipal()).getAuthInfo();
-        githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
-        mvc.perform(delete("/github/connection").cookie(new Cookie("access_token",
-                        tokenService.login(second.getEmail()).accessToken())))
-                .andExpect(status().isNoContent());
-        assertThat(connections.findByUserId(first.getId())).isPresent();
-        var cookie = new Cookie("access_token", tokenService.login(first.getEmail()).accessToken());
-        mvc.perform(delete("/github/connection").cookie(cookie)).andExpect(status().isNoContent());
-        mvc.perform(delete("/github/connection").cookie(cookie)).andExpect(status().isNoContent());
-        assertThat(connections.findByUserId(first.getId())).isEmpty();
-        mvc.perform(get("/github/connection").cookie(cookie))
-                .andExpect(status().isOk()).andExpect(jsonPath("$.connected").value(false));
-        githubConnections.connect(new AuthInfo(com.codeiary.domain.user.entity.enums.OAuthProvider.GITHUB,
-                "456", null, "another-account", false, false),
-                new GitHubLinkContext(first.getId(), Instant.now()));
-        assertThat(connections.findByUserId(first.getId()).orElseThrow().getGithubLogin())
-                .isEqualTo("another-account");
-    }
+  @DisplayName("현재 사용자의 GitHub 연결만 조회할 수 있다.")
+  @Test
+  void returnOnlyCurrentUsersConnection() throws Exception {
+    mvc.perform(get("/github/connection")).andExpect(status().isUnauthorized());
+    var first = users.saveAndFlush(UserFixture.create(Role.USER));
+    var second = users.saveAndFlush(User.create("second@example.com", "두번째", Role.USER));
+    var profile = ((CustomOAuth2User) githubAuthentication().getPrincipal()).getAuthInfo();
+    githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
+    mvc.perform(
+            get("/github/connection")
+                .cookie(
+                    new Cookie("access_token", tokenService.login(first.getEmail()).accessToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.connected").value(true))
+        .andExpect(jsonPath("$.login").value("octocat"));
+    mvc.perform(
+            get("/github/connection")
+                .cookie(
+                    new Cookie(
+                        "access_token", tokenService.login(second.getEmail()).accessToken())))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.connected").value(false))
+        .andExpect(jsonPath("$.login").isEmpty());
+  }
 
-    @DisplayName("연동 요청이 없는 GitHub 콜백을 거절할 수 있다.")
-    @Test
-    void rejectGitHubCallbackWithoutLinkRequest() throws Exception {
-        var response = new MockHttpServletResponse();
-        successHandler.onAuthenticationSuccess(new MockHttpServletRequest(), response, githubAuthentication());
-        assertThat(response.getRedirectedUrl()).contains("error=oauth2");
-        assertThat(response.getCookies()).isEmpty();
-        assertThat(connections.count()).isZero();
-    }
+  @DisplayName("현재 사용자의 연결만 해제하고 다시 연동할 수 있다.")
+  @Test
+  void disconnectOnlyCurrentUsersConnectionAndAllowRetry() throws Exception {
+    mvc.perform(delete("/github/connection")).andExpect(status().isUnauthorized());
+    var first = users.saveAndFlush(UserFixture.create(Role.USER));
+    var second = users.saveAndFlush(User.create("second@example.com", "두번째", Role.USER));
+    var profile = ((CustomOAuth2User) githubAuthentication().getPrincipal()).getAuthInfo();
+    githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
+    mvc.perform(
+            delete("/github/connection")
+                .cookie(
+                    new Cookie(
+                        "access_token", tokenService.login(second.getEmail()).accessToken())))
+        .andExpect(status().isNoContent());
+    assertThat(connections.findByUserId(first.getId())).isPresent();
+    var cookie = new Cookie("access_token", tokenService.login(first.getEmail()).accessToken());
+    mvc.perform(delete("/github/connection").cookie(cookie)).andExpect(status().isNoContent());
+    mvc.perform(delete("/github/connection").cookie(cookie)).andExpect(status().isNoContent());
+    assertThat(connections.findByUserId(first.getId())).isEmpty();
+    mvc.perform(get("/github/connection").cookie(cookie))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.connected").value(false));
+    githubConnections.connect(
+        new AuthInfo(
+            com.codeiary.domain.user.entity.enums.OAuthProvider.GITHUB,
+            "456",
+            null,
+            "another-account",
+            false,
+            false),
+        new GitHubLinkContext(first.getId(), Instant.now()));
+    assertThat(connections.findByUserId(first.getId()).orElseThrow().getGithubLogin())
+        .isEqualTo("another-account");
+  }
 
-    @DisplayName("만료된 연동 요청과 다른 사용자의 GitHub 계정을 거절할 수 있다.")
-    @Test
-    void rejectExpiredLinkAndAnotherUsersGitHubAccount() {
-        var first = users.saveAndFlush(UserFixture.create(Role.USER));
-        var second = users.saveAndFlush(User.create("second@example.com", "두번째", Role.USER));
-        var profile = ((CustomOAuth2User) githubAuthentication().getPrincipal()).getAuthInfo();
-        assertThatThrownBy(() -> githubConnections.connect(profile,
+  @DisplayName("연동 요청이 없는 GitHub 콜백을 거절할 수 있다.")
+  @Test
+  void rejectGitHubCallbackWithoutLinkRequest() throws Exception {
+    var response = new MockHttpServletResponse();
+    successHandler.onAuthenticationSuccess(
+        new MockHttpServletRequest(), response, githubAuthentication());
+    assertThat(response.getRedirectedUrl()).contains("error=oauth2");
+    assertThat(response.getCookies()).isEmpty();
+    assertThat(connections.count()).isZero();
+  }
+
+  @DisplayName("만료된 연동 요청과 다른 사용자의 GitHub 계정을 거절할 수 있다.")
+  @Test
+  void rejectExpiredLinkAndAnotherUsersGitHubAccount() {
+    var first = users.saveAndFlush(UserFixture.create(Role.USER));
+    var second = users.saveAndFlush(User.create("second@example.com", "두번째", Role.USER));
+    var profile = ((CustomOAuth2User) githubAuthentication().getPrincipal()).getAuthInfo();
+    assertThatThrownBy(() ->
+            githubConnections.connect(
+                profile,
                 new GitHubLinkContext(first.getId(), Instant.now().minus(Duration.ofMinutes(11)))))
-                .isInstanceOf(RestApiException.class);
-        githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
-        githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
-        assertThat(connections.count()).isEqualTo(1);
-        assertThatThrownBy(() -> githubConnections.connect(profile,
-                new GitHubLinkContext(second.getId(), Instant.now())))
-                .isInstanceOf(RestApiException.class);
-    }
+        .isInstanceOf(RestApiException.class);
+    githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
+    githubConnections.connect(profile, new GitHubLinkContext(first.getId(), Instant.now()));
+    assertThat(connections.count()).isEqualTo(1);
+    assertThatThrownBy(() ->
+            githubConnections.connect(
+                profile, new GitHubLinkContext(second.getId(), Instant.now())))
+        .isInstanceOf(RestApiException.class);
+  }
 
-    private OAuth2AuthorizationRequest authorization(GitHubLinkContext context) {
-        return OAuth2AuthorizationRequest.authorizationCode()
-                .authorizationUri("https://github.com/login/oauth/authorize")
-                .clientId("test").redirectUri("http://localhost:8080/login/oauth2/code/github")
-                .state("test-state").attributes(attributes -> {
-                    attributes.put("registration_id", "github");
-                    attributes.put(GitHubLinkContext.ATTRIBUTE, context);
-                }).build();
-    }
+  private OAuth2AuthorizationRequest authorization(GitHubLinkContext gitHubLinkContext) {
+    return OAuth2AuthorizationRequest.authorizationCode()
+        .authorizationUri("https://github.com/login/oauth/authorize")
+        .clientId("test")
+        .redirectUri("http://localhost:8080/login/oauth2/code/github")
+        .state("test-state")
+        .attributes(attributes -> {
+          attributes.put("registration_id", "github");
+          attributes.put(GitHubLinkContext.ATTRIBUTE, gitHubLinkContext);
+        })
+        .build();
+  }
 
-    private org.springframework.security.core.Authentication githubAuthentication() {
-        var attributes = Map.<String, Object>of("id", 123L, "login", "octocat");
-        var profile = OAuth2ResponseFactory.from("github", attributes);
-        var principal = new CustomOAuth2User(new DefaultOAuth2User(List.of(), attributes, "id"),
-                new AuthInfo(profile.getProvider(), profile.getSubject(), profile.getEmail(), profile.getName(),
-                        profile.isEmailVerified(), profile.isEmailAuthoritative()));
-        return UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of());
-    }
+  private org.springframework.security.core.Authentication githubAuthentication() {
+    var attributes = Map.<String, Object>of("id", 123L, "login", "octocat");
+    var profile = OAuth2ResponseFactory.from("github", attributes);
+    var principal =
+        new CustomOAuth2User(
+            new DefaultOAuth2User(List.of(), attributes, "id"),
+            new AuthInfo(
+                profile.getProvider(),
+                profile.getSubject(),
+                profile.getEmail(),
+                profile.getName(),
+                profile.isEmailVerified(),
+                profile.isEmailAuthoritative()));
+    return UsernamePasswordAuthenticationToken.authenticated(principal, null, List.of());
+  }
 
-    private Cookie cookie(Role role) {
-        var user = users.saveAndFlush(UserFixture.create(role));
-        return new Cookie("access_token", tokenService.login(user.getEmail()).accessToken());
-    }
+  private Cookie cookie(Role role) {
+    var user = users.saveAndFlush(UserFixture.create(role));
+    return new Cookie("access_token", tokenService.login(user.getEmail()).accessToken());
+  }
 }

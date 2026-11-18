@@ -14,5 +14,4 @@ import org.springframework.test.context.ActiveProfiles;
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ImportAutoConfiguration(FlywayAutoConfiguration.class)
 @Import({TestcontainersConfiguration.class, JpaAuditingConfig.class, QuerydslConfig.class})
-public abstract class RepositoryTestSupport {
-}
+public abstract class RepositoryTestSupport {}

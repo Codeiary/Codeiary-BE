@@ -22,64 +22,75 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class GitHubBlogOutbox extends TimeBaseEntity {
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+  @Id
+  @GeneratedValue(strategy = GenerationType.IDENTITY)
+  private Long id;
 
-    @Column(nullable = false)
-    private Long postId;
+  @Column(nullable = false)
+  private Long postId;
 
-    @Column(nullable = false)
-    private Long authorId;
+  @Column(nullable = false)
+  private Long authorId;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private EventType eventType;
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20)
+  private EventType eventType;
 
-    @Column(length = 200)
-    private String title;
+  @Column(length = 200)
+  private String title;
 
-    @Column(length = 400)
-    private String previousPath;
+  @Column(length = 400)
+  private String previousPath;
 
-    @Column(length = 400)
-    private String targetPath;
+  @Column(length = 400)
+  private String targetPath;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private OutBoxStatus status = OutBoxStatus.PENDING;
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20)
+  private OutBoxStatus status = OutBoxStatus.PENDING;
 
-    @Column(nullable = false)
-    private int claimVersion;
+  @Column(nullable = false)
+  private int claimVersion;
 
-    @Column(nullable = false)
-    private int failureCount;
+  @Column(nullable = false)
+  private int failureCount;
 
-    @Column(nullable = false, columnDefinition = "TIMESTAMP(6) WITH TIME ZONE")
-    private Instant nextAttemptAt;
+  @Column(nullable = false, columnDefinition = "TIMESTAMP(6) WITH TIME ZONE")
+  private Instant nextAttemptAt;
 
-    @Builder(access = AccessLevel.PRIVATE)
-    private GitHubBlogOutbox(Long postId, Long authorId, EventType eventType, String title,
-            String previousPath, String targetPath, Instant nextAttemptAt) {
-        this.postId = postId;
-        this.authorId = authorId;
-        this.eventType = eventType;
-        this.title = title;
-        this.previousPath = previousPath;
-        this.targetPath = targetPath;
-        this.nextAttemptAt = nextAttemptAt;
-    }
+  @Builder(access = AccessLevel.PRIVATE)
+  private GitHubBlogOutbox(
+      Long postId,
+      Long authorId,
+      EventType eventType,
+      String title,
+      String previousPath,
+      String targetPath,
+      Instant nextAttemptAt) {
+    this.postId = postId;
+    this.authorId = authorId;
+    this.eventType = eventType;
+    this.title = title;
+    this.previousPath = previousPath;
+    this.targetPath = targetPath;
+    this.nextAttemptAt = nextAttemptAt;
+  }
 
-    public static GitHubBlogOutbox create(Long postId, Long authorId, EventType eventType, String title,
-            String previousPath, String targetPath) {
-        return GitHubBlogOutbox.builder()
-                .postId(postId)
-                .authorId(authorId)
-                .eventType(eventType)
-                .title(title)
-                .previousPath(previousPath)
-                .targetPath(targetPath)
-                .nextAttemptAt(Instant.now())
-                .build();
-    }
+  public static GitHubBlogOutbox create(
+      Long postId,
+      Long authorId,
+      EventType eventType,
+      String title,
+      String previousPath,
+      String targetPath) {
+    return GitHubBlogOutbox.builder()
+        .postId(postId)
+        .authorId(authorId)
+        .eventType(eventType)
+        .title(title)
+        .previousPath(previousPath)
+        .targetPath(targetPath)
+        .nextAttemptAt(Instant.now())
+        .build();
+  }
 }
